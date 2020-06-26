@@ -87,6 +87,7 @@
  */
 #define FIELD_SIZEOF(t, f) (sizeof(((t*)0)->f))
 
+/* 올림 */
 #define DIV_ROUND_UP __KERNEL_DIV_ROUND_UP
 
 #define DIV_ROUND_DOWN_ULL(ll, d) \

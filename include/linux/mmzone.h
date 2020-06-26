@@ -1140,14 +1140,18 @@ struct mem_section {
 	 */
 };
 
+/* SPARSEMEM_EXTREME 커널 설정일 경우 4k(2^12) / 16(2^4) = 256(2^8) */
 #ifdef CONFIG_SPARSEMEM_EXTREME
 #define SECTIONS_PER_ROOT       (PAGE_SIZE / sizeof (struct mem_section))
 #else
 #define SECTIONS_PER_ROOT	1
 #endif
 
+/* 섹션 번호를 가지고 mem_section 구조체 포인터의 첫번째 배열(ROOT)의 인덱스를 가져온다  */
 #define SECTION_NR_TO_ROOT(sec)	((sec) / SECTIONS_PER_ROOT)
+/* mem_section 구조체 포인터의 첫번째(ROOT)배열의 총 인덱스 수 256K/256 = 1024  */
 #define NR_SECTION_ROOTS	DIV_ROUND_UP(NR_MEM_SECTIONS, SECTIONS_PER_ROOT)
+/* 섹션 ROOT 하나에 포함되는 mem_section 구조체 포인터의 두번째 배열전체 */
 #define SECTION_ROOT_MASK	(SECTIONS_PER_ROOT - 1)
 
 #ifdef CONFIG_SPARSEMEM_EXTREME

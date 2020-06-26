@@ -516,8 +516,12 @@ failed:
 }
 
 /*
- * Allocate the accumulated non-linear sections, allocate a mem_map
+ * Allocate the acqcumulated non-linear sections, allocate a mem_map
  * for each and record the physical to section mapping.
+ */
+/*
+ * 누적된 비선형 섹션을 할당하고, 각각에 mem_map을 할당하고
+ * 섹션 매핑에 대한 물리주소(?)를 기록한다.
  */
 void __init sparse_init(void)
 {
