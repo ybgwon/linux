@@ -133,11 +133,22 @@ int __section_nr(struct mem_section* ms)
  * node.  This keeps us from having to use another data structure.  The
  * node information is cleared just before we store the real mem_map.
  */
+/**
+ * early boot 단계에서 section_mem_map이 실제 mem_map에 사용되기 전에
+ * 우리는 section_mem_map을 섹션의 NUMA 노드를 저장하기 위해 사용한다.
+ * 이를 통해 다른 데이터 구조를 사용하지 않아도 된다. 노드 정보는 실제 mem_map을
+ * 저장하기 직전에 지워진다.
+ *
+ * @param nid - 변환하려는 노드 아이디
+ *
+ * @return - 변환된 노드
+ */
 static inline unsigned long sparse_encode_early_nid(int nid)
 {
 	return (nid << SECTION_NID_SHIFT);
 }
 
+/* section_mem_map 에서 하위 3bit 에 저장된 정보를 제거한 numa id 반환 */
 static inline int sparse_early_nid(struct mem_section *section)
 {
 	return (section->section_mem_map >> SECTION_NID_SHIFT);
@@ -189,6 +200,15 @@ static void section_mark_present(struct mem_section *ms)
 	ms->section_mem_map |= SECTION_MARKED_PRESENT;
 }
 
+/**
+ *  주어진 섹션의 다음 섹션 번호부터 SECTION_MARKED_PRESENT bit 가 설정된
+ *  섹션 번호를 찾는다. 찾을 때까지 __highest_present_section_nr 작은 동안
+ *  루프를 돈다.
+ *
+ * @param section_nr
+ *
+ * @return - SECTION_MARKED_PRESENT bit 가 설정된 다음 섹션번호. 실패시 -1
+ */
 static inline int next_present_section_nr(int section_nr)
 {
 	do {
@@ -199,12 +219,21 @@ static inline int next_present_section_nr(int section_nr)
 
 	return -1;
 }
+/**
+ * start 에서 __highest_present_section_nr 까지 루프를 돌며
+ * SECTION_MARKED_PRESENT bit 가 설정된 section_nr 을 반환한다.
+ * 처음 next_present_section_nr 호출시 (start-1) 을 하여 start부터
+ * 루프를 돌게된다.
+ */
 #define for_each_present_section_nr(start, section_nr)		\
 	for (section_nr = next_present_section_nr(start-1);	\
 	     ((section_nr != -1) &&				\
 	      (section_nr <= __highest_present_section_nr));	\
 	     section_nr = next_present_section_nr(section_nr))
 
+/*
+ * 0 부터 SECTION_MARKED_PRESENT bit 가 설정된 첫번째 섹션번호를 찾는다.
+ */
 static inline unsigned long first_present_section_nr(void)
 {
 	return next_present_section_nr(-1);
@@ -525,13 +554,21 @@ failed:
  */
 void __init sparse_init(void)
 {
+	/* present bit 가 설정된 첫번째 섹션번호 */
 	unsigned long pnum_begin = first_present_section_nr();
+	/* 첫번째 섹션의 node 아이디 */
 	int nid_begin = sparse_early_nid(__nr_to_section(pnum_begin));
 	unsigned long pnum_end, map_count = 1;
 
 	/* Setup pageblock_order for HUGETLB_PAGE_SIZE_VARIABLE */
 	set_pageblock_order();
 
+	/* ==== 주의 ====
+	 * pnum_begin + 1 을 하는 것은 pnum_begin 에 대한 nid 는 이미
+	 * nid_begin에 저장되 있기 때문에 그 다음 노드 부터 루프를 돌면서
+	 * nid_begin과 비교하여 같으면 map_count를 증가하고 다음 루프로
+	 * 진행하고 다르면 nid_begin, pnum_begin, map_count 재설정한다
+	 */
 	for_each_present_section_nr(pnum_begin + 1, pnum_end) {
 		int nid = sparse_early_nid(__nr_to_section(pnum_end));
 

@@ -6499,6 +6499,10 @@ void __init set_pageblock_order(void)
  * include/linux/pageblock-flags.h for the values of pageblock_order based on
  * the kernel config
  */
+/* CONFIG_HUGETLB_PAGE_SIZE_VARIABLE 이 설정되지 않았으면 set_pageblock_order 함수는
+ * pageblock_order 가 compile-time 에 설정되었으므로 사용하지 않는다.
+ * 커널 설정에 따른 pageblock_order 값은 include/linux/pageblock-flags.h 파일을 보라
+ */
 void __init set_pageblock_order(void)
 {
 }

@@ -1088,6 +1088,13 @@ static inline unsigned long early_pfn_to_nid(unsigned long pfn)
 #define PAGES_PER_SECTION       (1UL << PFN_SECTION_SHIFT)
 #define PAGE_SECTION_MASK	(~(PAGES_PER_SECTION-1))
 
+/*
+ * 하나의 섹션에 필요한 PAGEBLOCK_BITS 의 갯수. 여기서는 섹션당 필요한
+ * PFN 갯수를 pageblock_order(2^9) 로 나누었는데 섹션이 1G(2^30)
+ * 로 가정하고 2M(2^21) 페이지 블록단위로 보아 512(2^9)개 PB가 있고
+ * 하나당 4bit 이니 2048bit(256Byte)로 계산한다.
+ * 512 * 4 = 2048bit, 2048 / 8 = 256Byte
+ */
 #define SECTION_BLOCKFLAGS_BITS \
 	((1UL << (PFN_SECTION_SHIFT - pageblock_order)) * NR_PAGEBLOCK_BITS)
 
@@ -1154,12 +1161,28 @@ struct mem_section {
 /* 섹션 ROOT 하나에 포함되는 mem_section 구조체 포인터의 두번째 배열전체 */
 #define SECTION_ROOT_MASK	(SECTIONS_PER_ROOT - 1)
 
+/*
+ * ==== 주의 ====
+ * mem_section 은 mem_section 구조체의 이중 포인터(이중배열)이다.
+ * SPARSEMEM_EXTREME 커널설정일 경우는 런타임에 섹션 루트 인덱스에 대한
+ * 두번째 배열 인덱스 하나를 동적으로 할당한다. 커널설정이 아닐 경우는
+ * 섹션 루트 하나당 섹션이 한개이므로 굳이 이중 배열이 필요 없지만
+ * 동일한 api 를 사용하기 위해 이렇게 설정한 것 같다.
+ */
 #ifdef CONFIG_SPARSEMEM_EXTREME
 extern struct mem_section **mem_section;
 #else
 extern struct mem_section mem_section[NR_SECTION_ROOTS][SECTIONS_PER_ROOT];
 #endif
 
+/**
+ * 섹션 번호를 가지고 mem_section 구조체 이중 배열의 첫번째와 두번째
+ * 배열 인덱스를 알아내어 그 값의 주소를 반환한다.
+ *
+ * @param nr - 섹션 번호
+ *
+ * @return - 인덱스에 해당하는 mem_section 구조체 주소
+ */
 static inline struct mem_section *__nr_to_section(unsigned long nr)
 {
 #ifdef CONFIG_SPARSEMEM_EXTREME
@@ -1186,6 +1209,18 @@ extern unsigned long usemap_size(void);
  *      which results in PFN_SECTION_SHIFT equal 6.
  * To sum it up, at least 6 bits are available.
  */
+/*
+ * 우리는 약간의 정보를 저장하기 위해 mem_map 포인터의 하위 비트를 사용한다.
+ * 포인터는 mem_map - section_nr_to_pfn(pnum) 로 계산된다.
+ * 결과는 두 값의 최소 정렬로 정렬된다.
+ * 1. 모든 mem_map 배열은 페이지 정렬
+ * 2. section_nr_to_pfn() 은 항상 PFN_SECTION_SHIFT 최저 비트를 지운다.
+ *    PFN_SECTION_SHIFT 는 아키텍쳐별로 고유하다
+ *    (SECTION_SIZE_BITS - PAGE_SHIFT 와 같음).
+ *    최악의 조합은 256k 페이지의 파워 pc 이고 PFN_SECTION_SHIFT의
+ *    결과는 6이 된다.
+ * 이를 요약하변 적어도 6bits는 사용가능하다.
+ */
 #define	SECTION_MARKED_PRESENT	(1UL<<0)
 #define SECTION_HAS_MEM_MAP	(1UL<<1)
 #define SECTION_IS_ONLINE	(1UL<<2)
@@ -1200,11 +1235,22 @@ static inline struct page *__section_mem_map_addr(struct mem_section *section)
 	return (struct page *)map;
 }
 
+/*
+ * mem_section 구조체의 section_mem_map 멤버 변수에
+ * SECTION_MARKED_PRESENT bit가 설정되었으면 1을 반환 아니면 0 반환
+ */
 static inline int present_section(struct mem_section *section)
 {
 	return (section && (section->section_mem_map & SECTION_MARKED_PRESENT));
 }
 
+/**
+ * 주어진 섹션번호에 해당하는 mem_map 에 SECTION_MARKED_PRESENT bit 가 설정되었는지
+ * 를 반환한다.
+ * @param nr - 섹션 번호
+ *
+ * @return - SECTION_MARKED_PRESENT bit가 설정되었으면 1 아니면 0
+ */
 static inline int present_section_nr(unsigned long nr)
 {
 	return present_section(__nr_to_section(nr));
