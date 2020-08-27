@@ -499,6 +499,10 @@ void __weak __meminit vmemmap_populate_print_last(void)
  * Initialize sparse on a specific node. The node spans [pnum_begin, pnum_end)
  * And number of present sections in this node is map_count.
  */
+/*
+ * 특정노드 sparse 초기화. 노드는 pnum_begin 에서 pnum_end 미만까지 걸쳐 있고
+ * 이 노드의 present 섹션 갯수는 map_count 이다.
+ */
 static void __init sparse_init_nid(int nid, unsigned long pnum_begin,
 				   unsigned long pnum_end,
 				   unsigned long map_count)
@@ -566,8 +570,10 @@ void __init sparse_init(void)
 	/* ==== 주의 ====
 	 * pnum_begin + 1 을 하는 것은 pnum_begin 에 대한 nid 는 이미
 	 * nid_begin에 저장되 있기 때문에 그 다음 노드 부터 루프를 돌면서
-	 * nid_begin과 비교하여 같으면 map_count를 증가하고 다음 루프로
-	 * 진행하고 다르면 nid_begin, pnum_begin, map_count 재설정한다
+	 * nid_begin과 비교하여 같으면 map_count를 증가한 후 다음 루프로
+	 * 진행하고 다르면 nid_begin, pnum_begin, map_count 재설정후
+	 * 루프를 진행한다. pnum_begin+1 부터 시작해서 pnum_end 에 다음
+	 * present bit 가 설정된 섹션 번호가 주어진다.
 	 */
 	for_each_present_section_nr(pnum_begin + 1, pnum_end) {
 		int nid = sparse_early_nid(__nr_to_section(pnum_end));

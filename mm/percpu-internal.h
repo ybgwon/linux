@@ -94,6 +94,7 @@ static inline int pcpu_nr_pages_to_map_bits(int pages)
  * This conversion is from the number of physical pages that the chunk
  * serves to the number of bits in the bitmap.
  */
+/* 4byte당 하나의 bit로 표현하므로 페이지당(4K) 1k의 bit로 표현된다. */
 static inline int pcpu_chunk_map_bits(struct pcpu_chunk *chunk)
 {
 	return pcpu_nr_pages_to_map_bits(chunk->nr_pages);

@@ -30,6 +30,7 @@
 struct pglist_data *node_data[MAX_NUMNODES] __read_mostly;
 EXPORT_SYMBOL(node_data);
 nodemask_t numa_nodes_parsed __initdata;
+/* equal. static int cpu_to_node_map[256] = {-1,} */
 static int cpu_to_node_map[NR_CPUS] = { [0 ... NR_CPUS-1] = NUMA_NO_NODE };
 
 static int numa_distance_cnt;

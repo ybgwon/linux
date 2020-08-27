@@ -384,6 +384,12 @@ static void pcpu_next_md_free_region(struct pcpu_chunk *chunk, int *bit_off,
  * within the block to see if the request can be fulfilled prior to the contig
  * hint.
  */
+/*
+ * 주어진 할당 요구에 맞는 영역을 찾는다
+ * 주어진 크기와 정렬을 만족하는 다음 자유 영역을 찾는다. 할당에 사용될수 있는 유효한
+ * 영역이 있을 경우만 반환한다. 할당 요청이 블록내에 맞으면 contig hint 이전에
+ * 요청을 이행할 수 있는지 확인하기 위해 block->first_free가 반환됩니다.
+ */
 static void pcpu_next_fit_region(struct pcpu_chunk *chunk, int alloc_bits,
 				 int align, int *bit_off, int *bits)
 {
@@ -410,6 +416,8 @@ static void pcpu_next_fit_region(struct pcpu_chunk *chunk, int alloc_bits,
 		 * This uses the block offset to determine if this has been
 		 * checked in the prior iteration.
 		 */
+		/* block->contig_hint_start 이전에도 할당 요청이 만족될 수 있으므로
+		 * bit_off 값을 firset_free로 계산하여 반환 */
 		if (block->contig_hint &&
 		    block->contig_hint_start >= block_off &&
 		    block->contig_hint >= *bits + alloc_bits) {
@@ -438,6 +446,11 @@ static void pcpu_next_fit_region(struct pcpu_chunk *chunk, int alloc_bits,
  * based on the metadata blocks and return the offset @bit_off and size in
  * bits of the free area @bits.  pcpu_for_each_fit_region only returns when
  * a fit is found for the allocation request.
+ */
+/*
+ * Metadata free 영역 반복자. metadata blocks을 기반으로 free 영역의 집게를 수행하고
+ * offset(@bit_off)과 free 영역 bits의 크기(@bits)를 반환한다.
+ * pcpu_for_each_fit_region 은 할당 요청에 적합한 영역이 있을때만 반환한다.
  */
 #define pcpu_for_each_md_free_region(chunk, bit_off, bits)		\
 	for (pcpu_next_md_free_region((chunk), &(bit_off), &(bits));	\
@@ -581,6 +594,11 @@ static void pcpu_chunk_update(struct pcpu_chunk *chunk, int bit_off, int bits)
  *      chunk->contig_bits_start
  *      nr_empty_pop_pages (chunk and global)
  */
+/*
+ * chunk의 metadata  를 갱신한다.
+ * 가장 큰 contig 영역을 찾기위해 metadata block을 반복한다.
+ * 또한 pupulated pages를 세고 global count를 갱신하가위해 차이값을 사용한다.
+ */
 static void pcpu_chunk_refresh_hint(struct pcpu_chunk *chunk)
 {
 	int bit_off, bits, nr_empty_pop_pages;
@@ -592,7 +610,7 @@ static void pcpu_chunk_refresh_hint(struct pcpu_chunk *chunk)
 	bits = nr_empty_pop_pages = 0;
 	pcpu_for_each_md_free_region(chunk, bit_off, bits) {
 		pcpu_chunk_update(chunk, bit_off, bits);
-
+		/* chunk 내의 모든 free pages 수 계산 */
 		nr_empty_pop_pages += pcpu_cnt_pop_pages(chunk, bit_off, bits);
 	}
 
@@ -603,6 +621,16 @@ static void pcpu_chunk_refresh_hint(struct pcpu_chunk *chunk)
 	 * so the delta is used to update the global counter.  The reserved
 	 * chunk is not part of the free page count as they are populated
 	 * at init and are special to serving reserved allocations.
+	 */
+	/* nr_empty_pop_pages 를 추적한다.
+	 * chunk는 이전에 보유한 free pages 수를 유지하므로 차이값은 전역 카운터를
+	 * 업데이트하는데 사용된다. reserved chunk는 init 에서 채워졌고 reserved
+	 * 할당을 제공하는데 특별하므로 free page에서 제외한다.
+	 */
+	/*
+	 * 새로 계산한 nr_empty_pop_pages 와 이전에 사용한()
+	 * chunk->nr_empty_pop_pages 의 차이값으로 전역 변수
+	 * pcpu_nr_empty_pop_pages 를 업데이트한다.
 	 */
 	if (chunk != pcpu_reserved_chunk)
 		pcpu_nr_empty_pop_pages +=
@@ -738,6 +766,10 @@ static void pcpu_block_update_hint_alloc(struct pcpu_chunk *chunk, int bit_off,
 
 		if (e_off == PCPU_BITMAP_BLOCK_BITS) {
 			/* reset the block */
+			/*
+			 * e_block 의 전체 영역이 할당 되었으므로 아래 for 문에서
+			 * 전체가 사용중인 block 으로 다루어져야 하므로 1을 더함
+			 */
 			e_block++;
 		} else {
 			if (e_off > e_block->contig_hint_start) {
@@ -752,6 +784,8 @@ static void pcpu_block_update_hint_alloc(struct pcpu_chunk *chunk, int bit_off,
 		}
 
 		/* update in-between md_blocks */
+		/* md_blocks 중간 update */
+		/* s_block 과 e_block 사이의 블록들은 전체가 할당된 영역이다 */
 		for (block = s_block + 1; block < e_block; block++) {
 			block->contig_hint = 0;
 			block->left_free = 0;
@@ -1090,7 +1124,7 @@ static struct pcpu_chunk * __init pcpu_alloc_first_chunk(unsigned long tmp_addr,
 
 	/* region calculations */
 	aligned_addr = tmp_addr & PAGE_MASK;
-
+	/* start_offset = 4k 단위로 내림 정렬하며 조정된 크기 */
 	start_offset = tmp_addr - aligned_addr;
 
 	/*
@@ -1113,6 +1147,7 @@ static struct pcpu_chunk * __init pcpu_alloc_first_chunk(unsigned long tmp_addr,
 
 	chunk->base_addr = (void *)aligned_addr;
 	chunk->start_offset = start_offset;
+	/* start_offset + map_size를 4k 정렬하면서 늘어난 크기 */
 	chunk->end_offset = region_size - chunk->start_offset - map_size;
 
 	chunk->nr_pages = region_size >> PAGE_SHIFT;
@@ -1905,6 +1940,10 @@ struct pcpu_alloc_info * __init pcpu_alloc_alloc_info(int nr_groups,
 			  __alignof__(ai->groups[0].cpu_map[0]));
 	ai_size = base_size + nr_units * sizeof(ai->groups[0].cpu_map[0]);
 
+	/*
+	 * pcpu_alloc_info 구조체 사이즈 + pcpu_group_info 구조체 사이즈 +
+	 * nr_units * 4 크기만큼 메모리 할당 받아옴.
+	 */
 	ptr = memblock_alloc(PFN_ALIGN(ai_size), PAGE_SIZE);
 	if (!ptr)
 		return NULL;
@@ -1913,6 +1952,7 @@ struct pcpu_alloc_info * __init pcpu_alloc_alloc_info(int nr_groups,
 
 	ai->groups[0].cpu_map = ptr;
 
+	/* 각 unit의 cpu_map이 가리키는 값에는 NR_CPUS(256) 저장 */
 	for (unit = 0; unit < nr_units; unit++)
 		ai->groups[0].cpu_map[unit] = NR_CPUS;
 
@@ -2195,6 +2235,8 @@ int __init pcpu_setup_first_chunk(const struct pcpu_alloc_info *ai,
 	 * can be shrunk to compensate while still staying above the
 	 * configured sizes.
 	 */
+	/* static_size를 PCPU_MIN_ALLOC_SIZE(4byte)로 정렬하고 정렬하면서 조정한
+	 * 크기만큼 dyn_size 를 줄인다. */
 	static_size = ALIGN(ai->static_size, PCPU_MIN_ALLOC_SIZE);
 	dyn_size = ai->dyn_size - (static_size - ai->static_size);
 
@@ -2306,13 +2348,16 @@ early_param("percpu_alloc", percpu_alloc_setup);
  * On success, pointer to the new allocation_info is returned.  On
  * failure, ERR_PTR value is returned.
  */
+/* pcpu_build_alloc_info(8k, 28k, 4k, cpu_distance_fn); */
 static struct pcpu_alloc_info * __init pcpu_build_alloc_info(
 				size_t reserved_size, size_t dyn_size,
 				size_t atom_size,
 				pcpu_fc_cpu_distance_fn_t cpu_distance_fn)
 {
+	/* static int group_map[256] __attribute__((__section__(".init.data"))); */
 	static int group_map[NR_CPUS] __initdata;
 	static int group_cnt[NR_CPUS] __initdata;
+	/* 0xffff00001122ad58 - 0xffff00001121d000 = 0xDD58(56,664) */
 	const size_t static_size = __per_cpu_end - __per_cpu_start;
 	int nr_groups = 1, nr_units = 0;
 	size_t size_sum, min_unit_size, alloc_size;
@@ -2329,6 +2374,9 @@ static struct pcpu_alloc_info * __init pcpu_build_alloc_info(
 	/* calculate size_sum and ensure dyn_size is enough for early alloc */
 	size_sum = PFN_ALIGN(static_size + reserved_size +
 			    max_t(size_t, dyn_size, PERCPU_DYNAMIC_EARLY_SIZE));
+	/* static 과 reserved size는 고정한 채 align을 위해 추가된 size를
+	 * dyn_size 에 반영한다.
+	 */
 	dyn_size = size_sum - static_size - reserved_size;
 
 	/*
@@ -2340,6 +2388,12 @@ static struct pcpu_alloc_info * __init pcpu_build_alloc_info(
 	min_unit_size = max_t(size_t, size_sum, PCPU_MIN_UNIT_SIZE);
 
 	/* determine the maximum # of units that can fit in an allocation */
+	/*
+	 * atom_size가 4k 일 경우 min_unit_size 가 4k 보다 훨씬 크므로
+	 * 4k 단위로 올림한 값을 min_unit_size 로 나누어도 upa는 항상 1이다.
+	 * atom_size 1M,2M,16M 등을 지원하는 아키텍쳐에서 최적의 upa 값을
+	 * 계산하기 위해 필요하다.
+	 */
 	alloc_size = roundup(min_unit_size, atom_size);
 	upa = alloc_size / min_unit_size;
 	while (alloc_size % upa || (offset_in_page(alloc_size / upa)))
@@ -2347,6 +2401,12 @@ static struct pcpu_alloc_info * __init pcpu_build_alloc_info(
 	max_upa = upa;
 
 	/* group cpus according to their proximity */
+	/* group_map 과 group_cnt 배열에 값 지정. 노드가 2개이고
+	 * cpu 가 8 (노드0:0,1,2,3 노드1:4,5,6,7)일 때 각각의
+	 * 노드끼리만 LOCAL_DISTANCE 라고 본다면 배열의 값은 다음과 같다.
+	 * group_map[0-3] = 0, group_map[4-7] = 1,
+	 * group_cnt[0] = 4, group_cnt[1] = 4
+	 */
 	for_each_possible_cpu(cpu) {
 		group = 0;
 	next_group:
@@ -2371,6 +2431,10 @@ static struct pcpu_alloc_info * __init pcpu_build_alloc_info(
 	 * Related to atom_size, which could be much larger than the unit_size.
 	 */
 	last_allocs = INT_MAX;
+	/*
+	 * upa가 1 이 아닐경우 낭비되는 unit 이 num_possible_cpus의 1/3을
+	 * 넘지않는 조건에서의 최적의 upa값을 계산한다.
+	 */
 	for (upa = max_upa; upa; upa--) {
 		int allocs = 0, wasted = 0;
 
@@ -2400,6 +2464,9 @@ static struct pcpu_alloc_info * __init pcpu_build_alloc_info(
 	upa = best_upa;
 
 	/* allocate and fill alloc_info */
+	/* nr_units 는 upa 의 단위로 올림한 값이므로 실제
+	 * cpu 수보다도 클 수 있다.
+	 */
 	for (group = 0; group < nr_groups; group++)
 		nr_units += roundup(group_cnt[group], upa);
 
@@ -2413,6 +2480,10 @@ static struct pcpu_alloc_info * __init pcpu_build_alloc_info(
 		cpu_map += roundup(group_cnt[group], upa);
 	}
 
+	/*
+	 * pcpu_alloc_info 구조체 멤버변수 설정. __ai_size, nr_groups 멤버 변수는
+	 * 위 pcpu_alloc_alloc_info 함수에서 설정
+	 */
 	ai->static_size = static_size;
 	ai->reserved_size = reserved_size;
 	ai->dyn_size = dyn_size;
@@ -2420,6 +2491,12 @@ static struct pcpu_alloc_info * __init pcpu_build_alloc_info(
 	ai->atom_size = atom_size;
 	ai->alloc_size = alloc_size;
 
+	/*
+	 * pcpu_group_info 구조체 멤버 변수 설정. cpu_map 값에는 해당 cpu id가
+	 * 설정되는데 upa 가 1 이 아닐 경우 upa 로 올림 하는 과정에서 추가된
+	 * unit 은 값이 설정되지 않으므로 pcpu_alloc_alloc_info 함수에서
+	 * 설정된 NR_CPUS(256)값이 그대로 있게된다.
+	 */
 	for (group = 0, unit = 0; group < nr_groups; group++) {
 		struct pcpu_group_info *gi = &ai->groups[group];
 
@@ -2475,6 +2552,8 @@ static struct pcpu_alloc_info * __init pcpu_build_alloc_info(
  * RETURNS:
  * 0 on success, -errno on failure.
  */
+/* pcpu_embed_first_chunk(8k, 28k, 4k, pcpu_cpu_distance,
+   pcpu_fc_alloc, pcpu_fc_free) */
 int __init pcpu_embed_first_chunk(size_t reserved_size, size_t dyn_size,
 				  size_t atom_size,
 				  pcpu_fc_cpu_distance_fn_t cpu_distance_fn,
