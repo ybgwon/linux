@@ -26,6 +26,14 @@
 
 #define JUMP_LABEL_NOP_SIZE		AARCH64_INSN_SIZE
 
+// nop 명령 실행후 false 를 반환한다. 링커에 의해 pushsection 부분은
+// __jump_table 섹션에 값 세개가 위치하게 되는데 8byte 정렬(.align 3)이고
+// nop 코드 위치 까지의 상대주소, l_yes 라벨 까지의 상대주소,
+// 그리고 매개변수인 key 변수에서 현재 코드 까지의 상대주소가 저장된다.
+// 두번째 매개변수인 branch는 lsb에 저장하여 호출 매크로가 static_branch_likely
+// 인지 static_branch_unlikely 인지를 표시한다. static_key 구조체가
+// 8byte 정렬이므로 값이 0인 하위 3bit는 flag로 사용할 수 있다.
+// 이 값들은 jump_entry 구조체의 멤버이다.
 static __always_inline bool arch_static_branch(struct static_key *key,
 					       bool branch)
 {

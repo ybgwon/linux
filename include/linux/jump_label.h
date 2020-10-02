@@ -3,22 +3,22 @@
 #define _LINUX_JUMP_LABEL_H
 
 /*
- * Jump label support
+ * Jump label 지원
  *
  * Copyright (C) 2009-2012 Jason Baron <jbaron@redhat.com>
  * Copyright (C) 2011-2012 Red Hat, Inc., Peter Zijlstra
  *
- * DEPRECATED API:
+ * 폐지 예정 API:
  *
- * The use of 'struct static_key' directly, is now DEPRECATED. In addition
- * static_key_{true,false}() is also DEPRECATED. IE DO NOT use the following:
+ * 'struct static_key' 를 직접사용하는 것은, 이제 구식이다. 따라서
+ * static_key_{true,false}()도 마찬가지이다. 예. 다음을 사용하지 마세요
  *
  * struct static_key false = STATIC_KEY_INIT_FALSE;
  * struct static_key true = STATIC_KEY_INIT_TRUE;
  * static_key_true()
  * static_key_false()
  *
- * The updated API replacements are:
+ * 업데이트되어 대체된 API는 다음과 같다
  *
  * DEFINE_STATIC_KEY_TRUE(key);
  * DEFINE_STATIC_KEY_FALSE(key);
@@ -27,48 +27,42 @@
  * static_branch_likely()
  * static_branch_unlikely()
  *
- * Jump labels provide an interface to generate dynamic branches using
- * self-modifying code. Assuming toolchain and architecture support, if we
- * define a "key" that is initially false via "DEFINE_STATIC_KEY_FALSE(key)",
- * an "if (static_branch_unlikely(&key))" statement is an unconditional branch
- * (which defaults to false - and the true block is placed out of line).
- * Similarly, we can define an initially true key via
- * "DEFINE_STATIC_KEY_TRUE(key)", and use it in the same
- * "if (static_branch_unlikely(&key))", in which case we will generate an
- * unconditional branch to the out-of-line true branch. Keys that are
- * initially true or false can be using in both static_branch_unlikely()
- * and static_branch_likely() statements.
+ * Jump labels는 self-modifying 코드를 이용하여 동적 branches를 만드는
+ * interface를 제공한다. 툴체인가 아키텍쳐가 지원한다는 가정하에
+ * "DEFINE_STATIC_KEY_FALSE(key)"로 false로 초기화된 키를 정의하면
+ * "if (static_branch_unlikely(&key))"문은 무조건 분기이다.
+ * (기본값은 false이며  - 그리고 true 블록은 라인 밖이다.)
+ * 유사하게, "DEFINE_STATIC_KEY_TRUE(key)"를 통해 true로 초기화하는 키를
+ * 정의 할 수 있고 그 키를 같은 "if (static_branch_unlikely(&key))"에 사용하면
+ * 이 경우 라인 밖의 true branch로 향하는 무조건 분기가 만들어진다.
+ * true 나 false로 초기화 된 키는 static_branch_unlikely()
+ * 와 static_branch_likely() 둘 다에서 사용할수 있다.
  *
- * At runtime we can change the branch target by setting the key
- * to true via a call to static_branch_enable(), or false using
- * static_branch_disable(). If the direction of the branch is switched by
- * these calls then we run-time modify the branch target via a
- * no-op -> jump or jump -> no-op conversion. For example, for an
- * initially false key that is used in an "if (static_branch_unlikely(&key))"
- * statement, setting the key to true requires us to patch in a jump
- * to the out-of-line of true branch.
+ * runtime에 static_branch_enable()을 호출하여 키를 true로 설정하거나
+ * static_branch_disable()를 이용하여 false로 설정하여 분기 타겟을
+ * 바꿀수 있다. 분기의 방향이 이 호출에 의해 바뀌면 run-time에 분기 타겟을
+ * no-op -> jump or jump -> no-op 변환을 통해 변경한다. 예를 들면
+ * "if (static_branch_unlikely(&key))" 문에서 false로 초기화 된 키는
+ * 키를 true로 설정하려면 true 브랜치의 줄 외부로 jump를 패치해야한다.
  *
- * In addition to static_branch_{enable,disable}, we can also reference count
- * the key or branch direction via static_branch_{inc,dec}. Thus,
- * static_branch_inc() can be thought of as a 'make more true' and
- * static_branch_dec() as a 'make more false'.
+ * static_branch_{enable,disable}에 더하여, static_branch_{inc,dec} 함수를 통해
+ * 키 카운터나 분기 방향을 참조할 수 있다. static_branch_inc() 는 '더 참으로 만들기'
+ * static_branch_dec() 는 '더 거짓으로 만들기'로 생각할 수 있다.
  *
- * Since this relies on modifying code, the branch modifying functions
- * must be considered absolute slow paths (machine wide synchronization etc.).
- * OTOH, since the affected branches are unconditional, their runtime overhead
- * will be absolutely minimal, esp. in the default (off) case where the total
- * effect is a single NOP of appropriate size. The on case will patch in a jump
- * to the out-of-line block.
+ * 이것은 코드 변경에 의존하므로 분기 변경 함수는 절대 slow paths 로 간주 되어야 한다.
+ * (머신 전체 동기화 등.) 반면에 영향을 받은 분기는 무조건이므로
+ * runtime overhead(실시간 간접비)는 절대적으로 최소가 된다. 기본(off) 에서
+ * 총 영향은 적절한 크기의 단일 NOP 이다. on 의 경우는 블록 바깥으로 jump 하여
+ * 패치할 것이다.
  *
- * When the control is directly exposed to userspace, it is prudent to delay the
- * decrement to avoid high frequency code modifications which can (and do)
- * cause significant performance degradation. Struct static_key_deferred and
- * static_key_slow_dec_deferred() provide for this.
+ * 제어가 사용자영역에 바로 노출되어 있을때, 상단한 성능 저하를 유발할 수 있는 고빈도
+ * 코드 변경을 피하기 위해 감소(decrement)를 지연시키는 것이 바람직하다.
+ * static_key_deferred 구조체와 static_key_slow_dec_deferred()함수가
+ * 이를 위해 제공된다.
  *
- * Lacking toolchain and or architecture support, static keys fall back to a
- * simple conditional branch.
+ * 툴체인 이나 아키텍쳐 지원이 부족한 static keys는 간단 조건 분기로 돌아간다.
  *
- * Additional babbling in: Documentation/static-keys.txt
+ * 추가 정보: Documentation/static-keys.txt
  */
 
 #ifndef __ASSEMBLY__
@@ -87,17 +81,17 @@ extern bool static_key_initialized;
 struct static_key {
 	atomic_t enabled;
 /*
- * Note:
- *   To make anonymous unions work with old compilers, the static
- *   initialization of them requires brackets. This creates a dependency
- *   on the order of the struct with the initializers. If any fields
- *   are added, STATIC_KEY_INIT_TRUE and STATIC_KEY_INIT_FALSE may need
- *   to be modified.
+ * 주의:
+ *   익명 unions이 옛날 컴파일러에 동작하도록 하기위해 정적 초기화는
+ *   브라켓([])이 필요하다.
+ *   이것은 initializers를 사용하여 구조체 순서에 대한 종속성을 만든다.
+ *   만약 어떤 필드가 추가되면 STATIC_KEY_INIT_TRUE and STATIC_KEY_INIT_FALSE는
+ *   수정해야 할 수 있다.
  *
- * bit 0 => 1 if key is initially true
- *	    0 if initially false
- * bit 1 => 1 if points to struct static_key_mod
- *	    0 if points to struct jump_entry
+ * bit 0 => 1 키가 처음에 true인 경우
+ *	    0 처음에 false인 경우
+ * bit 1 => 1 구조체 static_key_mod 를 가리킬 때
+ *	    0 구조체 struct jump_entry 를 가리킬 때
  */
 	union {
 		unsigned long type;
@@ -120,9 +114,9 @@ struct static_key {
 #ifdef CONFIG_HAVE_ARCH_JUMP_LABEL_RELATIVE
 
 struct jump_entry {
-	s32 code;
-	s32 target;
-	long key;	// key may be far away from the core kernel under KASLR
+	s32 code; 	// 코드 상대 주소
+	s32 target;	// target 상대 주소
+	long key;	// KASLR 아래에서는 core 커널로 부터 멀리 떨어져 있다.
 };
 
 static inline unsigned long jump_entry_code(const struct jump_entry *entry)
@@ -351,6 +345,9 @@ struct static_key_false {
 #define STATIC_KEY_TRUE_INIT  (struct static_key_true) { .key = STATIC_KEY_INIT_TRUE,  }
 #define STATIC_KEY_FALSE_INIT (struct static_key_false){ .key = STATIC_KEY_INIT_FALSE, }
 
+// struct static_key_true name =
+//   (struct static_key_true) { .key = { .enabled = { 1 },
+// 				       { .entries = (void *)1UL } }, }
 #define DEFINE_STATIC_KEY_TRUE(name)	\
 	struct static_key_true name = STATIC_KEY_TRUE_INIT
 
@@ -360,6 +357,9 @@ struct static_key_false {
 #define DECLARE_STATIC_KEY_TRUE(name)	\
 	extern struct static_key_true name
 
+// struct static_key_false name =
+//   (struct static_key_false) { .key = { .enabled = { 1 },
+// 				        { .entries = (void *)0UL } }, }
 #define DEFINE_STATIC_KEY_FALSE(name)	\
 	struct static_key_false name = STATIC_KEY_FALSE_INIT
 
@@ -393,8 +393,7 @@ extern bool ____wrong_branch_error(void);
 #ifdef CONFIG_JUMP_LABEL
 
 /*
- * Combine the right initial value (type) with the right branch order
- * to generate the desired result.
+ * 올바른 초기값을 올바른 분기 순서와 결합하여 원하는 결과를 생성한다
  *
  *
  * type\branch|	likely (1)	      |	unlikely (0)
@@ -427,6 +426,10 @@ extern bool ____wrong_branch_error(void);
  * branch: 0 = unlikely, 1 = likely.
  *
  * This gives the following logic table:
+ * dynamic 설정이 적용되며 type 열을 둔 것은 runtime에도 enabled 와 type 값은 같이
+ * 동시에 존재하므로 경우의 수를 나타내기 위해 표현한 것 같다. 표에서 instruction 설정은
+ * enabled ^ branch 값이고 type은 enabled 와 값이 다를 시 static_key_enable 나
+ * static_key_disable 함수 등을 통해 초기값이 변경된 경우를 나타낸다고 보면 된다.
  *
  *	enabled	type	branch	  instuction
  * -----------------------------+-----------
@@ -448,6 +451,11 @@ extern bool ____wrong_branch_error(void);
  * See jump_label_type() / jump_label_init_type().
  */
 
+// 키 타입에 따라 arch_static_branch(true 타입) 나
+// arch_static_branch_jump(false 타입) 를 호출하여 결과를 return 받는다.
+// return 받은 bool 값을 반전(!)하여 likely 매크로의 매개변수로하여 반환한다.
+// arch_static_branch[_jump] 관련 함수 호출시 두번째 매개변수를 true 로
+// 설정하여 static_branch_likely 매크로에서 호출되었음을 표시한다.
 #define static_branch_likely(x)							\
 ({										\
 	bool branch;								\
@@ -460,6 +468,11 @@ extern bool ____wrong_branch_error(void);
 	likely(branch);								\
 })
 
+// 키 타입에 따라 arch_static_branch_jump(true 타입) 나
+// arch_static_branch(false 타입) 를 호출하여 결과를 return 받는다.
+// return 받은 bool 값을 unlikely 매크로의 매개변수로하여 반환한다.
+// arch_static_branch[_jump] 관련 함수 호출시 두번째 매개변수를  false 로
+// 설정하여 static_branch_unlikely 매크로에서 호출되었음을 표시한다.
 #define static_branch_unlikely(x)						\
 ({										\
 	bool branch;								\
