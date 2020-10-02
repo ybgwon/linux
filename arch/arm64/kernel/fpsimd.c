@@ -720,6 +720,11 @@ void sve_kernel_enable(const struct arm64_cpu_capabilities *__always_unused p)
  *
  * Use only if SVE is present.
  * This function clobbers the SVE vector length.
+ * 지원하는 SVE 벡터 길이를 확인하기 위해 cpufeatures에서 사용하는 pseudo-ZCR을
+ * 읽어라
+ *
+ * SVE가 있을때만 사용하라.
+ * 이 함수는 SVE 벡터 길이를 clobbers(?)한다.
  */
 u64 read_zcr_features(void)
 {
@@ -729,14 +734,15 @@ u64 read_zcr_features(void)
 	/*
 	 * Set the maximum possible VL, and write zeroes to all other
 	 * bits to see if they stick.
+	 * 최대 가능 VL을 설정하고, 다른 모든 비트에 0을 써서 고정되는지 확인한다.
 	 */
 	sve_kernel_enable(NULL);
 	write_sysreg_s(ZCR_ELx_LEN_MASK, SYS_ZCR_EL1);
 
 	zcr = read_sysreg_s(SYS_ZCR_EL1);
-	zcr &= ~(u64)ZCR_ELx_LEN_MASK; /* find sticky 1s outside LEN field */
+	zcr &= ~(u64)ZCR_ELx_LEN_MASK; /* LEN 필드 외부에서 sticky 1s를 찾는다 */
 	vq_max = sve_vq_from_vl(sve_get_vl());
-	zcr |= vq_max - 1; /* set LEN field to maximum effective value */
+	zcr |= vq_max - 1; /* LEN 필드를 최대 유효값으로 설정 */
 
 	return zcr;
 }

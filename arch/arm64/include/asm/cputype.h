@@ -145,11 +145,11 @@
 /*
  * Represent a range of MIDR values for a given CPU model and a
  * range of variant/revision values.
+ * 주어진 CPU 모델에 대한 MIDR 값 범위와 변형/개정 값의 범위를 나타낸다.
  *
- * @model	- CPU model as defined by MIDR_CPU_MODEL
- * @rv_min	- Minimum value for the revision/variant as defined by
- *		  MIDR_CPU_VAR_REV
- * @rv_max	- Maximum value for the variant/revision for the range.
+ * @model       - MIDR_CPU_MODEL에 정의된 CPU 모델
+ * @rv_min	- MIDR_CPU_VAR_REV 에 정의된 개정/변형 에 대한 최소값
+ * @rv_max	- 범위에 대한 개정/변형 최대값
  */
 struct midr_range {
 	u32 model;

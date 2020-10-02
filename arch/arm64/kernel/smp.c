@@ -439,13 +439,14 @@ void __init smp_prepare_boot_cpu(void)
 	 * Initialise the static keys early as they may be enabled by the
 	 * cpufeature code.
 	 */
+	// cpufeature 코드에서 static keys가 enabled 될 수 있으므로
+	// 일찍 키들을 초기화하라.
 	jump_label_init();
 	cpuinfo_store_boot_cpu();
 
 	/*
-	 * We now know enough about the boot CPU to apply the
-	 * alternatives that cannot wait until interrupt handling
-	 * and/or scheduling is enabled.
+	 * 이제 인터럽트 처리및(또는) 스케쥴링 이 활성화되기 전까지 기다릴 수 없는
+	 * alternatives 매크로를 적용하기 위해 boot CPU에 대해 충분히 안다.
 	 */
 	apply_boot_alternatives();
 

@@ -1311,35 +1311,30 @@ config ARM64_SVE
 	default y
 	depends on !KVM || ARM64_VHE
 	help
-	  The Scalable Vector Extension (SVE) is an extension to the AArch64
-	  execution state which complements and extends the SIMD functionality
-	  of the base architecture to support much larger vectors and to enable
-	  additional vectorisation opportunities.
+	  Scalable Vector Extension (SVE)는 더 큰 벡터를 제공하고 부가 벡터화 기회를
+	  활성화하기 위해 기본 아키텍쳐의 SIMD 기능을 보완하고 확장하는 AArch64
+	  실행 상태 확장이다.
 
-	  To enable use of this extension on CPUs that implement it, say Y.
+	  이를 구현하는 CPU 확장을 사용하려면 Y 선택.
 
-	  Note that for architectural reasons, firmware _must_ implement SVE
-	  support when running on SVE capable hardware.  The required support
-	  is present in:
+	  아키텍쳐상의 이유로 펌웨어는 SVE 지원 하드웨어에서 실행될 때 SVE 지원을
+	  꼭 구현하여야 합니다. 필요한 지원은 아래에 있습니다:
 
-	    * version 1.5 and later of the ARM Trusted Firmware
-	    * the AArch64 boot wrapper since commit 5e1261e08abf
+	    * 버전 1.5 이상 ARM Trusted 펌웨어
+	    * 커밋 5e1261e08abf 이후 AArch64 부트 wrapper
 	      ("bootwrapper: SVE: Enable SVE for EL2 and below").
 
-	  For other firmware implementations, consult the firmware documentation
-	  or vendor.
+	  다른 펌웨어 구현은 펌웨어 문서나 공급업체에 문의하세요
 
-	  If you need the kernel to boot on SVE-capable hardware with broken
-	  firmware, you may need to say N here until you get your firmware
-	  fixed.  Otherwise, you may experience firmware panics or lockups when
-	  booting the kernel.  If unsure and you are not observing these
-	  symptoms, you should assume that it is safe to say Y.
+	  만약 손상된 펌웨어로 SVE 지원 하드웨어를 부팅해야 한다면 펌웨어 문제가 
+	  해결될때까지 N 을 선택해야 할 수 있다. 그렇지 않으면
+	  커널 부팅시 패닉이나 멈춤을 경험할 것이다. 확실하지 않고 이러한 증상을
+	  관찰하지 않는다면 Y를 선택하는 것이 안전하다.
 
-	  CPUs that support SVE are architecturally required to support the
-	  Virtualization Host Extensions (VHE), so the kernel makes no
-	  provision for supporting SVE alongside KVM without VHE enabled.
-	  Thus, you will need to enable CONFIG_ARM64_VHE if you want to support
-	  KVM in the same kernel image.
+	  SVE를 지원하는 CPU 는 구조적으로 VHE 지원이 필요하므로 커널은 VHE가
+	  활성화되지 않은 상태에서 KVM과 함께 SVE를 지원하기위한 대비가 없다.
+	  같은 커널 이미지에서 KVM을 지원하기 원한다면
+	  CONFIG_ARM64_VHE 를 활성화 하라.
 
 config ARM64_MODULE_PLTS
 	bool

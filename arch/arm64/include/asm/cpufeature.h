@@ -287,8 +287,8 @@ extern struct arm64_ftr_reg arm64_ftr_reg_ctrel0;
 	 ARM64_CPUCAP_OPTIONAL_FOR_LATE_CPU)
 
 /*
- * CPU feature used early in the boot based on the boot CPU. All secondary
- * CPUs must match the state of the capability as detected by the boot CPU.
+ * 부팅 CPU를 기반으로 부트 초반에 사용되는 CPU 기능. 모든 보조 CPU는 부트 CPU에서 감지
+ * 한 기능 상태와 일치해야 한다.
  */
 #define ARM64_CPUCAP_STRICT_BOOT_CPU_FEATURE ARM64_CPUCAP_SCOPE_BOOT_CPU
 
@@ -298,13 +298,13 @@ struct arm64_cpu_capabilities {
 	u16 type;
 	bool (*matches)(const struct arm64_cpu_capabilities *caps, int scope);
 	/*
-	 * Take the appropriate actions to enable this capability for this CPU.
-	 * For each successfully booted CPU, this method is called for each
-	 * globally detected capability.
+	 * 현재 CPU에 대해 이 기능을 활성화 하려면 적당한 조치를 취하라.
+	 * 성공적으로 부팅된 각 CPU에 대해 이 method는 전역적으로 감지된
+	 * 각 기능에 대해 호출된다.
 	 */
 	void (*cpu_enable)(const struct arm64_cpu_capabilities *cap);
 	union {
-		struct {	/* To be used for erratum handling only */
+		struct {	/* 주로 erratum 처리에만 사용 */
 			struct midr_range midr_range;
 			const struct arm64_midr_revidr {
 				u32 midr_rv;		/* revision/variant */
@@ -324,15 +324,13 @@ struct arm64_cpu_capabilities {
 	};
 
 	/*
-	 * An optional list of "matches/cpu_enable" pair for the same
-	 * "capability" of the same "type" as described by the parent.
-	 * Only matches(), cpu_enable() and fields relevant to these
-	 * methods are significant in the list. The cpu_enable is
-	 * invoked only if the corresponding entry "matches()".
-	 * However, if a cpu_enable() method is associated
-	 * with multiple matches(), care should be taken that either
-	 * the match criteria are mutually exclusive, or that the
-	 * method is robust against being called multiple times.
+	 * 위에있는 것처럼 같은 유형 같은 기능의 "matches/cpu_enable"쌍의 선택적
+	 * 목록이다. 이 메소드와 관련된 matches(), cpu_enable() fields만
+	 * 목록에서 중요하다. cpu_enable은 대응하는 항목이 "matches()" 인 경우만
+	 * 수행된다. 그렇지만 cpu_enable() 메소드가 복수의 matches()함수와
+	 * 연결되어 있는 경우 일치 기준이 상호 배타적이거나 메소드가 여러번
+	 * 호출되는 것에 대해 견고하다는 점에 주의해야 한다.
+	 *
 	 */
 	const struct arm64_cpu_capabilities *match_list;
 };
@@ -497,6 +495,11 @@ static inline bool id_aa64mmfr0_mixed_endian_el0(u64 mmfr0)
 		cpuid_feature_extract_unsigned_field(mmfr0, ID_AA64MMFR0_BIGENDEL0_SHIFT) == 0x1;
 }
 
+/*
+ * ID_AA64PFR0_EL1 레지스터에서 최하위 4bit 확인하여 0b10이면 true return
+ * 의미는 데이터시터에 다음과 같이 나타나 있다.
+ * EL0 can be executed in either AArch64 or AArch32 state.
+ */
 static inline bool id_aa64pfr0_32bit_el0(u64 pfr0)
 {
 	u32 val = cpuid_feature_extract_unsigned_field(pfr0, ID_AA64PFR0_EL0_SHIFT);

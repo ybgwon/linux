@@ -424,14 +424,12 @@ static int search_cmp_ftr_reg(const void *id, const void *regp)
 }
 
 /*
- * get_arm64_ftr_reg - Lookup a feature register entry using its
- * sys_reg() encoding. With the array arm64_ftr_regs sorted in the
- * ascending order of sys_id , we use binary search to find a matching
- * entry.
+ * get_arm64_ftr_reg - sys_reg() 엔코딩을 이용하여 feature 레지스터 항목 찾기.
+ * sys_id의 오름차순으로 정렬된 arm64_ftr_regs 배열을 사용하여 일치하는 항목을
+ * 찾기위해 바이너리 search 를 사용한다.
  *
- * returns - Upon success,  matching ftr_reg entry for id.
- *         - NULL on failure. It is upto the caller to decide
- *	     the impact of a failure.
+ * returns - 성공하면 id에 대한 ftr_reg 항목
+ *           실패시 NULL. 실패의 영향 결정은 호출자에게 달려있다.
  */
 static struct arm64_ftr_reg *get_arm64_ftr_reg(u32 sys_id)
 {
@@ -447,6 +445,7 @@ static struct arm64_ftr_reg *get_arm64_ftr_reg(u32 sys_id)
 	return NULL;
 }
 
+// ftrp의 width, shift 값으로 mask를 설정하고 mask 부분만 reg에 ftr_val로 업데이트
 static u64 arm64_ftr_set_value(const struct arm64_ftr_bits *ftrp, s64 reg,
 			       s64 ftr_val)
 {
@@ -483,16 +482,16 @@ static void __init sort_ftr_regs(void)
 {
 	int i;
 
-	/* Check that the array is sorted so that we can do the binary search */
+	/* 이진 검색을 할 수 있게 배열이 정렬되었는지 검사 */
 	for (i = 1; i < ARRAY_SIZE(arm64_ftr_regs); i++)
 		BUG_ON(arm64_ftr_regs[i].sys_id < arm64_ftr_regs[i - 1].sys_id);
 }
 
 /*
- * Initialise the CPU feature register from Boot CPU values.
- * Also initiliases the strict_mask for the register.
- * Any bits that are not covered by an arm64_ftr_bits entry are considered
- * RES0 for the system-wide value, and must strictly match.
+ * 부트 CPU 값으로 CPU feature 레지스터를 초기화 한다. 또 strick_mask
+ * 레지스터도 초기화 한다. arm64_ftr_bits 항목에 없는 모든 비트는 시스템 전체 값에 대해
+ * RES0 로 간주되며 엄격하게 일치해야 한다.
+ * arm64_ftr_reg 구조체 멤버변수 설정.
  */
 static void __init init_cpu_ftr_reg(u32 sys_reg, u64 new)
 {
@@ -507,9 +506,12 @@ static void __init init_cpu_ftr_reg(u32 sys_reg, u64 new)
 	BUG_ON(!reg);
 
 	for (ftrp  = reg->ftr_bits; ftrp->width; ftrp++) {
+		// ftrp의 shift 에서 width 길이만큼만 1
 		u64 ftr_mask = arm64_ftr_mask(ftrp);
+		// new에서 ftrp의 shift 에서 width 길이만큼 읽어옴().
+		// 레지스터에서 특정 필드 값임.
 		s64 ftr_new = arm64_ftr_value(ftrp, new);
-
+		// var에 ftr_new 저장(필드 영역만)
 		val = arm64_ftr_set_value(ftrp, val, ftr_new);
 
 		valid_mask |= ftr_mask;
@@ -533,6 +535,7 @@ static void __init init_cpu_ftr_reg(u32 sys_reg, u64 new)
 extern const struct arm64_cpu_capabilities arm64_errata[];
 static const struct arm64_cpu_capabilities arm64_features[];
 
+/* cpu_hwcaps_ptrs 포인터배열에 해당 index의 값 설정 */
 static void __init
 init_cpu_hwcaps_indirect_list_from_array(const struct arm64_cpu_capabilities *caps)
 {
@@ -558,7 +561,7 @@ static void __init setup_boot_cpu_capabilities(void);
 
 void __init init_cpu_features(struct cpuinfo_arm64 *info)
 {
-	/* Before we start using the tables, make sure it is sorted */
+	/* 테이블 사용전 정렬되었는지 확인 */
 	sort_ftr_regs();
 
 	init_cpu_ftr_reg(SYS_CTR_EL0, info->reg_ctr);
@@ -602,12 +605,13 @@ void __init init_cpu_features(struct cpuinfo_arm64 *info)
 	/*
 	 * Initialize the indirect array of CPU hwcaps capabilities pointers
 	 * before we handle the boot CPU below.
+	 * 아래 부트 CPU를 처리하기 전에 hwcaps 포인터의 간접 배열 초기화
 	 */
 	init_cpu_hwcaps_indirect_list();
 
 	/*
-	 * Detect and enable early CPU capabilities based on the boot CPU,
-	 * after we have initialised the CPU feature infrastructure.
+	 * CPU feature 기반을 초기화 후 부트 CPU 에 기반한 초기 CPU 기능을
+	 * 감지하고 활성화 한다.
 	 */
 	setup_boot_cpu_capabilities();
 }
@@ -1673,6 +1677,11 @@ static void __init setup_elf_hwcaps(const struct arm64_cpu_capabilities *hwcaps)
 			cap_set_elf_hwcap(hwcaps);
 }
 
+/*
+ * 타입이 SCOPE_BOOT_CPU | SCOPE_LOCAL_CPU 이고 레지스터에서 caps에 대한 필드
+ * 값이 유효할 경우 cpu_hwcaps 비트맵에 해당 비트 설정하고 매개 변수와 caps->type
+ * 이 모두 SCOPE_BOOT_CPU 일 경우는 boot_capabilities 비트맵에 해당 비트를 설정한다.
+ */
 static void update_cpu_capabilities(u16 scope_mask)
 {
 	int i;
@@ -1722,6 +1731,7 @@ static int cpu_enable_non_boot_scope_capabilities(void *__unused)
 /*
  * Run through the enabled capabilities and enable() it on all active
  * CPUs
+ * 활성화 된 기능을 실행하고 모든 활성 CPU에서 활성화 한다.
  */
 static void __init enable_cpu_capabilities(u16 scope_mask)
 {
@@ -1742,27 +1752,30 @@ static void __init enable_cpu_capabilities(u16 scope_mask)
 		if (!cpus_have_cap(num))
 			continue;
 
-		/* Ensure cpus_have_const_cap(num) works */
+		/*
+		 * cpus_have_const_cap(num) 함수 실행 보장. cpu_hwcap_keys[num]
+		 * static key 배열에서 num index에 해당하는 키의 코드를 변경한다.
+		 * 여기서는 cpu_hwcap_keys가 DEFINE_STATIC_KEY_ARRAY_FALSE
+		 * 로 초기화 되었으므로 true를 반환하도록 변경된다
+		 */
 		static_branch_enable(&cpu_hwcap_keys[num]);
 
 		if (boot_scope && caps->cpu_enable)
 			/*
-			 * Capabilities with SCOPE_BOOT_CPU scope are finalised
-			 * before any secondary CPU boots. Thus, each secondary
-			 * will enable the capability as appropriate via
-			 * check_local_cpu_capabilities(). The only exception is
-			 * the boot CPU, for which the capability must be
-			 * enabled here. This approach avoids costly
-			 * stop_machine() calls for this case.
+			 * SCOPE_BOOT_CPU 범위의 기능은 이차 CPU 부트전에
+			 * 완료된다. 따라서 각 이차 CPU는
+			 * check_local_cpu_capabilities() 를 통해 적절한 기능을
+			 * 활성화 한다. 예외는 오직 boot CPU인데 이곳에서 기능이
+			 * 활성화 되어야만 한다. 이러한 접근은 이경우 값비싼
+			 * stop_machine() 호출을 피한다.
 			 */
 			caps->cpu_enable(caps);
 	}
 
 	/*
-	 * For all non-boot scope capabilities, use stop_machine()
-	 * as it schedules the work allowing us to modify PSTATE,
-	 * instead of on_each_cpu() which uses an IPI, giving us a
-	 * PSTATE that disappears when we return.
+	 * non-boot 범위의 기능을 위해 IPI를 사용하는 on_each_cpu()함수 대신에
+	 * PSTATE를 변경하는 작업을 예약할 때 stop_machine()함수를 사용하여
+	 * return 시 사라지는 PSTATE를 제공한다.
 	 */
 	if (!boot_scope)
 		stop_machine(cpu_enable_non_boot_scope_capabilities,
@@ -1921,9 +1934,9 @@ void check_local_cpu_capabilities(void)
 
 static void __init setup_boot_cpu_capabilities(void)
 {
-	/* Detect capabilities with either SCOPE_BOOT_CPU or SCOPE_LOCAL_CPU */
+	/* 타입이 SCOPE_BOOT_CPU 나 SCOPE_LOCAL_CPU 인 기능 감지*/
 	update_cpu_capabilities(SCOPE_BOOT_CPU | SCOPE_LOCAL_CPU);
-	/* Enable the SCOPE_BOOT_CPU capabilities alone right away */
+	/* SCOPE_BOOT_CPU 기능만 즉시 활성화 */
 	enable_cpu_capabilities(SCOPE_BOOT_CPU);
 }
 

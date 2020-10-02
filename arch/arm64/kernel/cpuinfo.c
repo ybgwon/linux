@@ -329,13 +329,13 @@ static void __cpuinfo_store_cpu(struct cpuinfo_arm64 *info)
 {
 	info->reg_cntfrq = arch_timer_get_cntfrq();
 	/*
-	 * Use the effective value of the CTR_EL0 than the raw value
-	 * exposed by the CPU. CTR_E0.IDC field value must be interpreted
-	 * with the CLIDR_EL1 fields to avoid triggering false warnings
-	 * when there is a mismatch across the CPUs. Keep track of the
-	 * effective value of the CTR_EL0 in our internal records for
-	 * acurate sanity check and feature enablement.
+	 * CPU에 노출된 원시값보다 CTR_EL0 의 유효값을 사용하라.
+	 * CTR_EL0.IDC 필드값은 CPU들간 불일치가 있을 때 잘못된 경고를
+	 * 발생시키는 것을 피하기 위해 CLIDR_EL1 값으로 해석되어야한다.
+	 * 정확한 온전성 검사 와 기능활성화를 위해 내부 기록에서 CTR_EL0의
+	 * 유효값을 추적하라.
 	 */
+
 	info->reg_ctr = read_cpuid_effective_cachetype();
 	info->reg_dczid = read_cpuid(DCZID_EL0);
 	info->reg_midr = read_cpuid_id();
@@ -352,7 +352,7 @@ static void __cpuinfo_store_cpu(struct cpuinfo_arm64 *info)
 	info->reg_id_aa64pfr1 = read_cpuid(ID_AA64PFR1_EL1);
 	info->reg_id_aa64zfr0 = read_cpuid(ID_AA64ZFR0_EL1);
 
-	/* Update the 32bit ID registers only if AArch32 is implemented */
+	/* AArch32 가 구현된 경우만 32bit ID 레지스터 업데이트 */
 	if (id_aa64pfr0_32bit_el0(info->reg_id_aa64pfr0)) {
 		info->reg_id_dfr0 = read_cpuid(ID_DFR0_EL1);
 		info->reg_id_isar0 = read_cpuid(ID_ISAR0_EL1);
@@ -389,6 +389,8 @@ void cpuinfo_store_cpu(void)
 
 void __init cpuinfo_store_boot_cpu(void)
 {
+	// info 포인터가 첫번째 cpu의 cpuinfo_arm64 형 percpu 변수인 cpu_data 를
+	// 가리키게 한다.
 	struct cpuinfo_arm64 *info = &per_cpu(cpu_data, 0);
 	__cpuinfo_store_cpu(info);
 
