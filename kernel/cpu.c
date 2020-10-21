@@ -2295,10 +2295,11 @@ void __init boot_cpu_init(void)
 }
 
 /*
- * Must be called _AFTER_ setting up the per_cpu areas
+ * 반드시 per_cpu 영역 설정후에 호출되어야 한다.
  */
 void __init boot_cpu_hotplug_init(void)
 {
+// percpu 구조체 변수 cpuhp_state의 멤버 booted_once 와 state 값 설정
 #ifdef CONFIG_SMP
 	this_cpu_write(cpuhp_state.booted_once, true);
 #endif

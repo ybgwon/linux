@@ -450,7 +450,8 @@ void __init smp_prepare_boot_cpu(void)
 	 */
 	apply_boot_alternatives();
 
-	/* Conditionally switch to GIC PMR for interrupt masking */
+	/* 인터럽트 마스킹을 위해 조건부로 GIC PMR로 전환 */
+
 	if (system_uses_irq_prio_masking())
 		init_gic_priority_masking();
 }

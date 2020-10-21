@@ -166,10 +166,11 @@ static void __apply_alternatives(void *alt_region,  bool is_module,
 	for (alt = region->begin; alt < region->end; alt++) {
 		int nr_inst;
 
+		// feature_mask 비트맵에 설정되지 않은 cpufeature는 건너뛴다.
 		if (!test_bit(alt->cpufeature, feature_mask))
 			continue;
 
-		/* Use ARM64_CB_PATCH as an unconditional patch */
+		/* ARM64_CB_PATCH 를 무조건 패치로 사용 */
 		if (alt->cpufeature < ARM64_CB_PATCH &&
 		    !cpus_have_cap(alt->cpufeature))
 			continue;
@@ -181,7 +182,9 @@ static void __apply_alternatives(void *alt_region,  bool is_module,
 
 		pr_info_once("patching kernel code\n");
 
+		// orig 명령이 있는 주소
 		origptr = ALT_ORIG_PTR(alt);
+		// 보안을 위해 origptr 을 1:1 영역에 맵한 주소
 		updptr = is_module ? origptr : lm_alias(origptr);
 		nr_inst = alt->orig_len / AARCH64_INSN_SIZE;
 
@@ -190,6 +193,7 @@ static void __apply_alternatives(void *alt_region,  bool is_module,
 		else
 			alt_cb  = ALT_REPL_PTR(alt);
 
+		// ALTENATIVE 매크로의 명령을 대체명려으로 교체한다.
 		alt_cb(alt, origptr, updptr, nr_inst);
 
 		if (!is_module) {
@@ -199,15 +203,15 @@ static void __apply_alternatives(void *alt_region,  bool is_module,
 	}
 
 	/*
-	 * The core module code takes care of cache maintenance in
-	 * flush_module_icache().
+	 * core 모듈 코드는 flush_module_icache() 에서 cache 관리를 처리한다.
 	 */
 	if (!is_module) {
 		dsb(ish);
 		__flush_icache_all();
 		isb();
 
-		/* Ignore ARM64_CB bit from feature mask */
+		/* feature mask 에서 ARM64_CB 비트 무시 */
+		// applied_alternatives 비트맵에 적용된 기능 표시
 		bitmap_or(applied_alternatives, applied_alternatives,
 			  feature_mask, ARM64_NCAPS);
 		bitmap_and(applied_alternatives, applied_alternatives,
@@ -253,20 +257,23 @@ void __init apply_alternatives_all(void)
 }
 
 /*
- * This is called very early in the boot process (directly after we run
- * a feature detect on the boot CPU). No need to worry about other CPUs
- * here.
+ * 이 함수는 부트 프로세스의 매우 초반에 불려진다.(부트 CPU에서 기능 감지를 실행한 직후).
+ * 여기에서 다른 CPU에 대해 걱정할 필요가 없다.
  */
 void __init apply_boot_alternatives(void)
 {
+	// __alt_instructions 섹션은 ALTERNATIVE 매크로에 의해
+	//  구조체 멤버들이 push 되어 만들어진다.
 	struct alt_region region = {
 		.begin	= (struct alt_instr *)__alt_instructions,
 		.end	= (struct alt_instr *)__alt_instructions_end,
 	};
 
-	/* If called on non-boot cpu things could go wrong */
+	/* non-boot cpu에서 호출되엇다면 문제가 발생할 수 있다. */
 	WARN_ON(smp_processor_id() != 0);
 
+	// boot_capabilities 가 매개변수이므로 type 이 SCOPE_BOOT_CPU 인
+	// cpu caps중에서만 적용된다.(ex. ARM64_HAS_SYSREG_GIC_CPUIF)
 	__apply_alternatives(&region, false, &boot_capabilities[0]);
 }
 

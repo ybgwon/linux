@@ -501,8 +501,8 @@ do {									\
 #define __this_cpu_dec_return(pcp)	__this_cpu_add_return(pcp, -1)
 
 /*
- * Operations with implied preemption/interrupt protection.  These
- * operations can be used without worrying about preemption or interrupt.
+ * 암시적 선점/중단(preemption/interrupt) 보호 기능이 있는 작업. 이 작업들은
+ * 선점 이나 중단에 대한 걱정없이 사용할 수 있다.
  */
 #define this_cpu_read(pcp)		__pcpu_size_call_return(this_cpu_read_, pcp)
 #define this_cpu_write(pcp, val)	__pcpu_size_call(this_cpu_write_, pcp, val)
