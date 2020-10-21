@@ -5661,10 +5661,10 @@ build_all_zonelists_init(void)
 }
 
 /*
- * unless system_state == SYSTEM_BOOTING.
+ * system_state == SYSTEM_BOOTING 이 아니면.
  *
- * __ref due to call of __init annotated helper build_all_zonelists_init
- * [protected by SYSTEM_BOOTING].
+ * __ref 는 __init 주석이 달린 도우미 함수 build_all_zonelists_init의 호출에 기인한다.
+ * [SYSTEM_BOOTING에 의해 보호됨].
  */
 void __ref build_all_zonelists(pg_data_t *pgdat)
 {
