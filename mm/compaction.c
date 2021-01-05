@@ -46,8 +46,10 @@ static inline void count_compact_events(enum vm_event_item item, long delta)
 #include <trace/events/compaction.h>
 
 #define block_start_pfn(pfn, order)	round_down(pfn, 1UL << (order))
-#define block_end_pfn(pfn, order)	ALIGN((pfn) + 1, 1UL << (order))
-#define pageblock_start_pfn(pfn)	block_start_pfn(pfn, pageblock_order)
+#define block_end_pfn(pfn, order)	ALIGN((pfn) + 1, 1UL << (order)) \
+		/* pfn이 속하는 블록(2^9)의 시작 pfn */
+#define pageblock_start_pfn(pfn)	block_start_pfn(pfn, pageblock_order) \
+		/* pfn이 속하는 다음 블록(2^9)의 시작 pfn */
 #define pageblock_end_pfn(pfn)		block_end_pfn(pfn, pageblock_order)
 
 static unsigned long release_freepages(struct list_head *freelist)
@@ -201,7 +203,8 @@ bool compaction_restarting(struct zone *zone, int order)
 		zone->compact_considered >= 1UL << zone->compact_defer_shift;
 }
 
-/* Returns true if the pageblock should be scanned for pages to isolate. */
+/* isolate를 위해 페이지가 스캔되어야 한다면 true를 반환한다 */
+// ignore_skip_hint 가 true 이거나 usemap 에 skip bit가 0 이면 true 반환
 static inline bool isolation_suitable(struct compact_control *cc,
 					struct page *page)
 {
@@ -403,6 +406,8 @@ static bool test_and_set_skip(struct compact_control *cc, struct page *page,
 	return skip;
 }
 
+// pfn 매개변수가 속하는 블록의 다음 블록의 시작 PFN을 compact_cached_migrate_pfn
+// 값으로 설정
 static void update_cached_migrate(struct compact_control *cc, unsigned long pfn)
 {
 	struct zone *zone = cc->zone;
@@ -507,6 +512,18 @@ static bool compact_lock_irqsave(spinlock_t *lock, unsigned long *flags,
  *		async compaction due to need_resched()
  * Returns false when compaction can continue (sync compaction might have
  *		scheduled)
+ */
+/*
+ * compaction 은 잠재적으로 매우 심하게 경합될 수 있는 거친 락을 가져와야 한다. 아무도
+ * lock을 기다리지 않을 때 조차 긴시간 IRQ가 비활성화되는 것을 피하기 위해 주기적으로
+ * 락을 해제해야 한다.
+ * IRQ를 허용하면 need_resched()함수가 true 가 될 수 있다. 만약 스케쥴링이 필요하면
+ * 비동기 compaction은 중지된다. 동기 compaction은 스케쥴된다. fatal signal이
+ * 보류중이면 두 compaction 유형은 중지된다. 두경우 잠금되었다면 삭제되고 다시
+ * 회복되지 않는다.
+ * fatal signal 보류로 인해서 compaction이 중지되어야 하거나 비동기 compaction이
+ * need_resched() 로 인해 중지되어야 하면 true 를 반환.
+ * compaction 이 계속되어야 하면 true 반환(동기 compaction은 스케쥴되었을 수 있음.)
  */
 static bool compact_unlock_should_abort(spinlock_t *lock,
 		unsigned long flags, bool *locked, struct compact_control *cc)
@@ -760,22 +777,21 @@ static bool too_many_isolated(pg_data_t *pgdat)
 }
 
 /**
- * isolate_migratepages_block() - isolate all migrate-able pages within
- *				  a single pageblock
+ * isolate_migratepages_block() - 단일 페이지블록 내에서 마이그레이션 가능한 모든
+ *				  페이지를 분리
  * @cc:		Compaction control structure.
  * @low_pfn:	The first PFN to isolate
  * @end_pfn:	The one-past-the-last PFN to isolate, within same pageblock
  * @isolate_mode: Isolation mode to be used.
  *
- * Isolate all pages that can be migrated from the range specified by
- * [low_pfn, end_pfn). The range is expected to be within same pageblock.
- * Returns zero if there is a fatal signal pending, otherwise PFN of the
- * first page that was not scanned (which may be both less, equal to or more
- * than end_pfn).
+ * [low_pfn, end_pfn)에 지정된 범위에서 마이그레이션 할 수있는 모든 페이지를 분리합니다.
+ * 범위는 동일한 페이지 블록 내에 있어야합니다. 보류중인 fatal signal이 있으면
+ * 0을 반환하고 그렇지 않으면 스캔되지 않은 첫 번째 페이지의 PFN을 반환합니다
+ * (둘 다 end_pfn보다 작거나 같거나 클 수 있음).
  *
- * The pages are isolated on cc->migratepages list (not required to be empty),
- * and cc->nr_migratepages is updated accordingly. The cc->migrate_pfn field
- * is neither read nor updated.
+ * 페이지는 cc->migratepages 목록 (비어 있지 않아도 됨)에 분리되어 있으며
+ * cc->nr_migratepages는 그에 따라 업데이트됩니다.
+ * cc-> migrate_pfn 필드는 읽거나 업데이트되지 않습니다.
  */
 static unsigned long
 isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
@@ -793,9 +809,9 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 	bool skip_updated = false;
 
 	/*
-	 * Ensure that there are not too many pages isolated from the LRU
-	 * list by either parallel reclaimers or compaction. If there are,
-	 * delay for some time until fewer pages are isolated
+	 * 병렬 reclaimers나 compaction에 의해 LRU 목록에서 분리된 페이지가
+	 * 너무 많지 않은지 확인하라. 만약 그렇다면 적은 수의 페이지들이 분리되도록
+	 * 잠시 지연하라.
 	 */
 	while (unlikely(too_many_isolated(pgdat))) {
 		/* async migration should just abort */
@@ -820,30 +836,26 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 
 		if (skip_on_failure && low_pfn >= next_skip_pfn) {
 			/*
-			 * We have isolated all migration candidates in the
-			 * previous order-aligned block, and did not skip it due
-			 * to failure. We should migrate the pages now and
-			 * hopefully succeed compaction.
+			 * 이전 order 정렬된 블록의 모든 migration 후보를
+			 * 격리하였고 실패로 건너뛰지 않았다. 이제 페이지들을 migrate
+			 * 해야하고 compaction에 성공해야 한다.
 			 */
 			if (nr_isolated)
 				break;
 
 			/*
-			 * We failed to isolate in the previous order-aligned
-			 * block. Set the new boundary to the end of the
-			 * current block. Note we can't simply increase
-			 * next_skip_pfn by 1 << order, as low_pfn might have
-			 * been incremented by a higher number due to skipping
-			 * a compound or a high-order buddy page in the
-			 * previous loop iteration.
+			 * 이전 order 정렬 블록의 격리에 실패했다. 현재 블록의
+			 * 마지막에 새 경계를 설정하라. 우리는 간단히 2의 order 승으로
+			 * next_skip_pfn을 증가시킬 수 없는데 low_pfn이 이전
+			 * 루프 반복에서 compound나 high-order 버디 페이지의
+			 * 건너뛰기로 인해 높은 수로 증가되었을 수 있기 때문이다
 			 */
 			next_skip_pfn = block_end_pfn(low_pfn, cc->order);
 		}
 
 		/*
-		 * Periodically drop the lock (if held) regardless of its
-		 * contention, to give chance to IRQs. Abort async compaction
-		 * if contended.
+		 * 주기적으로 IRQ에 기회를 주기 위해 경합에 관계없이 lock(보유한 경우)을
+		 * 삭제하라. 경합하는 경우 비동기 compaction 은 중단하라.
 		 */
 		if (!(low_pfn % SWAP_CLUSTER_MAX)
 		    && compact_unlock_should_abort(&pgdat->lru_lock,
@@ -857,10 +869,10 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 		page = pfn_to_page(low_pfn);
 
 		/*
-		 * Check if the pageblock has already been marked skipped.
-		 * Only the aligned PFN is checked as the caller isolates
-		 * COMPACT_CLUSTER_MAX at a time so the second call must
-		 * not falsely conclude that the block should be skipped.
+		 * 페이지블록이 이미 건너뛰기로 표시되었는지 확인하라.
+		 * 호출자가 한번에 COMPACT_CLUSTER_MAX 를 분리하므로
+		 * 정렬된 PFN 만이 검사된다. 그래서 두번째 호출에서 블록이 건너 뛰어야
+		 * 한다고 잘못 결정내려서는 안된다.
 		 */
 		if (!valid_page && IS_ALIGNED(low_pfn, pageblock_nr_pages)) {
 			if (!cc->ignore_skip_hint && get_pageblock_skip(page)) {
@@ -871,18 +883,17 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 		}
 
 		/*
-		 * Skip if free. We read page order here without zone lock
-		 * which is generally unsafe, but the race window is small and
-		 * the worst thing that can happen is that we skip some
-		 * potential isolation targets.
+		 * free하면 건너뛰라. 보통 안전하지 않지만 zone lock 없이 여기에서
+		 * page order 를 읽는다. 그러나 race window 는 작고 일어날 수 있는
+		 * 최악의 상황은 약간의 잠재적 isolation targets을 건너 뛰는 것이다
 		 */
 		if (PageBuddy(page)) {
 			unsigned long freepage_order = page_order_unsafe(page);
 
 			/*
-			 * Without lock, we cannot be sure that what we got is
-			 * a valid page order. Consider only values in the
-			 * valid order range to prevent low_pfn overflow.
+			 * lock 없이 유효한 페이지 order 인지 확신할 수 없다.
+			 * low_pfn overflow 를 막기위해 유효한 order영역 값인지만
+			 * 고려하라.
 			 */
 			if (freepage_order > 0 && freepage_order < MAX_ORDER)
 				low_pfn += (1UL << freepage_order) - 1;
@@ -890,11 +901,10 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 		}
 
 		/*
-		 * Regardless of being on LRU, compound pages such as THP and
-		 * hugetlbfs are not to be compacted. We can potentially save
-		 * a lot of iterations if we skip them at once. The check is
-		 * racy, but we can consider only valid values and the only
-		 * danger is skipping too much.
+		 * LRU 페이지와 관계없이, THP와 hugetlbfs 같은 compound 페이지는
+		 * compaction 안된다. 한번에 그것들을 건너뛰면 잠재적으로 많은
+		 * 반복을 절약할 수 있다. check는 racy 하지만 유효값만 고려할 수
+		 * 있고 위험은 너무 많이 건너뛰는 것 뿐이다.
 		 */
 		if (PageCompound(page)) {
 			const unsigned int order = compound_order(page);
@@ -905,9 +915,8 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 		}
 
 		/*
-		 * Check may be lockless but that's ok as we recheck later.
-		 * It's possible to migrate LRU and non-lru movable pages.
-		 * Skip any other type of page
+		 * 검사는 락이 없을 수 있지만 후에 재검사 하므로 괜찮다.
+		 * migrage LRU 와 non-lru movable 페이지 외에는 건너뛰라.
 		 */
 		if (!PageLRU(page)) {
 			/*
@@ -1611,9 +1620,9 @@ reinit_migrate_pfn(struct compact_control *cc)
 }
 
 /*
- * Briefly search the free lists for a migration source that already has
- * some free pages to reduce the number of pages that need migration
- * before a pageblock is free.
+ * pageblock 이 free 되기 전에 migration이 필요한 페이지 수를 감소시키기 위해
+ * 이미 약간의 free pages를 가진 migration source에 대한 free lists를
+ * 간단히 찾는다
  */
 static unsigned long fast_find_migrateblock(struct compact_control *cc)
 {
@@ -1624,40 +1633,39 @@ static unsigned long fast_find_migrateblock(struct compact_control *cc)
 	unsigned long high_pfn;
 	int order;
 
-	/* Skip hints are relied on to avoid repeats on the fast search */
+	/* 빠른 검색에서 반복을 피하기 위해 Skip hints 가 사용된다. */
 	if (cc->ignore_skip_hint)
 		return pfn;
 
 	/*
-	 * If the migrate_pfn is not at the start of a zone or the start
-	 * of a pageblock then assume this is a continuation of a previous
-	 * scan restarted due to COMPACT_CLUSTER_MAX.
+	 * migrate_pfn이 영역의 시작이나 페이지 블록의 시작에 있지 않은 경우
+	 * COMPACT_CLUSTER_MAX로 인해 다시 시작된 이전 스캔의 연속이라고
+	 * 가정합니다.
 	 */
 	if (pfn != cc->zone->zone_start_pfn && pfn != pageblock_start_pfn(pfn))
 		return pfn;
 
 	/*
-	 * For smaller orders, just linearly scan as the number of pages
-	 * to migrate should be relatively small and does not necessarily
-	 * justify freeing up a large block for a small allocation.
+	 * 작은 주문의 경우 마이그레이션 할 페이지 수가 상대적으로 적어야하며
+	 * 작은 할당을 위해 큰 블록을 확보하는 것이 반드시 정당화되지는 않으므로
+	 * 선형 스캔 만하십시오.
 	 */
 	if (cc->order <= PAGE_ALLOC_COSTLY_ORDER)
 		return pfn;
 
 	/*
-	 * Only allow kcompactd and direct requests for movable pages to
-	 * quickly clear out a MOVABLE pageblock for allocation. This
-	 * reduces the risk that a large movable pageblock is freed for
-	 * an unmovable/reclaimable small allocation.
+	 * 할당을 위한 MOVABLE 페이지블록을 신속하게 지우기 위해
+	 * kcompactd 와 movable 페이지를 위한 직접 요구만 허락한다.
+	 * 이것은 unmovable/reclaimable 을 위한 작은 할당에서 큰 movable
+	 * 페이지블록이 해제되는 위험을 줄인다.
 	 */
 	if (cc->direct_compaction && cc->migratetype != MIGRATE_MOVABLE)
 		return pfn;
 
 	/*
-	 * When starting the migration scanner, pick any pageblock within the
-	 * first half of the search space. Otherwise try and pick a pageblock
-	 * within the first eighth to reduce the chances that a migration
-	 * target later becomes a source.
+	 * migration 스캐너 시작시 검색 공간 중간의 전반부에서 페이지블록을
+	 * 선택한다. 그렇지 않을 경우 migration 대상이 후에 소스 가 될
+	 * 가능성을 줄이기 위해 처음 8분의 1내 페이지블록을 선택한다.
 	 */
 	distance = (cc->free_pfn - cc->migrate_pfn) >> 1;
 	if (cc->migrate_pfn != cc->zone->zone_start_pfn)
@@ -1684,10 +1692,9 @@ static unsigned long fast_find_migrateblock(struct compact_control *cc)
 			free_pfn = page_to_pfn(freepage);
 			if (free_pfn < high_pfn) {
 				/*
-				 * Avoid if skipped recently. Ideally it would
-				 * move to the tail but even safe iteration of
-				 * the list assumes an entry is deleted, not
-				 * reordered.
+				 * 최근 건너뛰었다면 피하라. 이상적으로는 꼬리로
+				 * 이동하나 목록의 안전한 반복조차도 항목이 재정렬
+				 * 되지 않고 삭제되었다고 가정한다
 				 */
 				if (get_pageblock_skip(freepage)) {
 					if (list_is_last(freelist, &freepage->lru))
@@ -1696,7 +1703,7 @@ static unsigned long fast_find_migrateblock(struct compact_control *cc)
 					continue;
 				}
 
-				/* Reorder to so a future search skips recent pages */
+				/* 다음 검색에서 최근 페이지를 건너 뛰도록 재정렬 */
 				move_freelist_tail(freelist, freepage);
 
 				update_fast_start_pfn(cc, free_pfn);
@@ -1728,9 +1735,9 @@ static unsigned long fast_find_migrateblock(struct compact_control *cc)
 }
 
 /*
- * Isolate all pages that can be migrated from the first suitable block,
- * starting at the block pointed to by the migrate scanner pfn within
- * compact_control.
+ * compact_control 내의 마이그레이션 스캐너 pfn이 가리키는 블록에서
+ * 시작하여 첫 번째 적합한 블록에서 마이그레이션 할 수있는 모든 페이지를
+ * 분리합니다.
  */
 static isolate_migrate_t isolate_migratepages(struct zone *zone,
 					struct compact_control *cc)
@@ -1745,9 +1752,9 @@ static isolate_migrate_t isolate_migratepages(struct zone *zone,
 	bool fast_find_block;
 
 	/*
-	 * Start at where we last stopped, or beginning of the zone as
-	 * initialized by compact_zone(). The first failure will use
-	 * the lowest PFN as the starting point for linear scanning.
+	 * 마지막으로 멈춘 지점 또는 compact_zone() 함수에 의해 초기화 된
+	 * zone의 시작점에서 시작한다. 첫번째 실패는 선형 scanning 을 위한
+	 * 시작점으로서 가장 아래 PFN을 사용한다.(?)
 	 */
 	low_pfn = fast_find_migrateblock(cc);
 	block_start_pfn = pageblock_start_pfn(low_pfn);
@@ -1755,9 +1762,9 @@ static isolate_migrate_t isolate_migratepages(struct zone *zone,
 		block_start_pfn = zone->zone_start_pfn;
 
 	/*
-	 * fast_find_migrateblock marks a pageblock skipped so to avoid
-	 * the isolation_suitable check below, check whether the fast
-	 * search was successful.
+	 * fast_find_migrateblock 함수는 아래의 isolation_suitable 함수의 검사를
+	 * 피하기 위해 건너 뛴 페이지 블록을 표시하므로 빠른 검색이 성공했는지
+	 * 확인합니다.(?)
 	 */
 	fast_find_block = low_pfn != cc->migrate_pfn && !cc->fast_search_fail;
 
@@ -1768,6 +1775,10 @@ static isolate_migrate_t isolate_migratepages(struct zone *zone,
 	 * Iterate over whole pageblocks until we find the first suitable.
 	 * Do not cross the free scanner.
 	 */
+	/*
+	 * 첫번째 적합 요소를 찾을 때까지 모든 페이지블록을 반복하라.
+	 * free scaner를 침범하지 마라.
+	 */
 	for (; block_end_pfn <= cc->free_pfn;
 			fast_find_block = false,
 			low_pfn = block_end_pfn,
@@ -1775,10 +1786,10 @@ static isolate_migrate_t isolate_migratepages(struct zone *zone,
 			block_end_pfn += pageblock_nr_pages) {
 
 		/*
-		 * This can potentially iterate a massively long zone with
-		 * many pageblocks unsuitable, so periodically check if we
-		 * need to schedule.
+		 * 부적합한 페이지 블록이 매우 긴 zone을 반복할수 있으므로
+		 * 스케쥴링이 필요한지 주기적으로 확인하라.
 		 */
+		// 32번에 한번꼴
 		if (!(low_pfn % (SWAP_CLUSTER_MAX * pageblock_nr_pages)))
 			cond_resched();
 
@@ -1788,23 +1799,22 @@ static isolate_migrate_t isolate_migratepages(struct zone *zone,
 			continue;
 
 		/*
-		 * If isolation recently failed, do not retry. Only check the
-		 * pageblock once. COMPACT_CLUSTER_MAX causes a pageblock
-		 * to be visited multiple times. Assume skip was checked
-		 * before making it "skip" so other compaction instances do
-		 * not scan the same block.
+		 * isolation 이 최근에 실패하였다면 재시도 하지 마세요.
+		 * 페이지블록을 한번만 확인하세요. COMPACT_CLUSTER_MAX 는 페이지블록을
+		 * 여러번 방문하도록 한다. 건너뛰기는 그것을 "skip"으로 만들기 전에
+		 * 검사되었다고 가정하므로 다른 compaction 객체들은 같은 블록을
+		 * 스캔하지 않는다.
 		 */
 		if (IS_ALIGNED(low_pfn, pageblock_nr_pages) &&
 		    !fast_find_block && !isolation_suitable(cc, page))
 			continue;
 
 		/*
-		 * For async compaction, also only scan in MOVABLE blocks
-		 * without huge pages. Async compaction is optimistic to see
-		 * if the minimum amount of work satisfies the allocation.
-		 * The cached PFN is updated as it's possible that all
-		 * remaining blocks between source and target are unsuitable
-		 * and the compaction scanners fail to meet.
+		 * 비동기 compaction의 경우 또한 huge 페이지가 없는 MOVABLE 블록
+		 * 에서만 스캔한다. 비동기 compaction 은 최소량의 작업으로 할당을
+		 * 만족시키는지를 알아보는데 낙관적이다. 캐쉬된 PFN은 모든 남아있는
+		 * 소스와 타겟사이의 블록이 적당하지 않고 compaction 스캐너가
+		 * 충족하지 못할 수 있으므로 업데이트 된다.
 		 */
 		if (!suitable_migration_source(cc, page)) {
 			update_cached_migrate(cc, block_end_pfn);
@@ -1985,6 +1995,8 @@ static enum compact_result __compaction_suitable(struct zone *zone, int order,
 	 */
 	watermark = (order > PAGE_ALLOC_COSTLY_ORDER) ?
 				low_wmark_pages(zone) : min_wmark_pages(zone);
+	// compaction시 freepages에 복사가 이루어 지고 아래에서 0 order로
+	// watermark 검사를 하므로 order 2배 정도의 격차를 더한다
 	watermark += compact_gap(order);
 	if (!__zone_watermark_ok(zone, 0, watermark, classzone_idx,
 						ALLOC_CMA, wmark_target))
@@ -2018,6 +2030,9 @@ enum compact_result compaction_suitable(struct zone *zone, int order,
 	 * excessive compaction for costly orders, but it should not be at the
 	 * expense of system stability.
 	 */
+	// compation 진행해야할 상황에서 order가 4이상 이면 단편화 계수를
+	// 구해서 0에서 500 이하이면 단편화 되지 않아서 compaction 효과가
+	// 없다고 보고 skip 하도록 한다.
 	if (ret == COMPACT_CONTINUE && (order > PAGE_ALLOC_COSTLY_ORDER)) {
 		fragindex = fragmentation_index(zone, order);
 		if (fragindex >= 0 && fragindex <= sysctl_extfrag_threshold)
@@ -2087,6 +2102,8 @@ compact_zone(struct compact_control *cc, struct capture_control *capc)
 	 * Clear pageblock skip if there were failures recently and compaction
 	 * is about to be retried after being deferred.
 	 */
+	// compaction이 64번 이상 실패한 경우 다시 시작하기 위해
+	// pageblock 의 skip 비트를 모두 clear한다.
 	if (compaction_restarting(cc->zone, cc->order))
 		__reset_isolation_suitable(cc->zone);
 

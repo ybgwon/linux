@@ -230,12 +230,11 @@ int find_suitable_fallback(struct free_area *area, unsigned int order,
 #endif
 
 /*
- * This function returns the order of a free page in the buddy system. In
- * general, page_zone(page)->lock must be held by the caller to prevent the
- * page from being allocated in parallel and returning garbage as the order.
- * If a caller does not hold page_zone(page)->lock, it must guarantee that the
- * page cannot be allocated or merged in parallel. Alternatively, it must
- * handle invalid values gracefully, and use page_order_unsafe() below.
+ * 이 함수는 버디 시스템의 free 페이지 order값을 반환한다. 보통 페이지가 병렬로 할당
+ * 되어 지고 order의 쓰레기 값을 반환하는 것을 막기위해 호출자에 의해
+ * page_zone(page)->lock이 보유되어야 한다. 호출자가 lock을 가지고 있지 않다면
+ * page는 병렬로 할당하거나 병합될 수 없음이 보장되어야 한다. 또는
+ * 유효하지 않은 값을 정상적으로 처리하고 아래의 page_order_unsafe() 함수를 사용하라.
  */
 static inline unsigned int page_order(struct page *page)
 {
@@ -253,6 +252,15 @@ static inline unsigned int page_order(struct page *page)
  * decide to remove the variable and inline the page_private(page) multiple
  * times, potentially observing different values in the tests and the actual
  * use of the result.
+ */
+/*
+ * page_order()함수와 비슷하지만 zone lock을 가지면 안되는 호출자를 위한 함수
+ * 경쟁을 최소화 하기 위해 PageBuddy함수가 먼저 호출자에 의해 검사되어야 하고
+ * 유효하지 않은 값은 정상적으로 처리되어야 한다.
+ * 호출자가 결과를 지역 변수 등에 할당하므로 READ_ONCE가 사용된다.
+ * 사용전 유효한 영역인지 검사하라 컴파일러는 여러번 변수와 inline page_private(page)
+ * 값을 삭제하는 것을 결정하지 못한다. 잠재적으로 테스트 와 결과의 실제 사용을
+ * 관찰할 수 있다.(?)
  */
 #define page_order_unsafe(page)		READ_ONCE(page_private(page))
 

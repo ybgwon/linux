@@ -1102,6 +1102,7 @@ static inline unsigned long early_pfn_to_nid(unsigned long pfn)
 #error Allocator MAX_ORDER exceeds SECTION_SIZE
 #endif
 
+// 몇번째 section(1G)인지를 반환
 static inline unsigned long pfn_to_section_nr(unsigned long pfn)
 {
 	return pfn >> PFN_SECTION_SHIFT;
@@ -1147,7 +1148,11 @@ struct mem_section {
 	 */
 };
 
-/* SPARSEMEM_EXTREME 커널 설정일 경우 4k(2^12) / 16(2^4) = 256(2^8) */
+/*
+ * SPARSEMEM_EXTREME 커널 설정일 경우 4k(2^12) / 16(2^4) = 256(2^8)
+ * 하나의 페이지에 담을 수 있는 섹션 루트의 수. 1G 섹션 루트가 16byte의
+ * mem_section 구조체로 표현된다.
+ */
 #ifdef CONFIG_SPARSEMEM_EXTREME
 #define SECTIONS_PER_ROOT       (PAGE_SIZE / sizeof (struct mem_section))
 #else
@@ -1156,9 +1161,11 @@ struct mem_section {
 
 /* 섹션 번호를 가지고 mem_section 구조체 포인터의 첫번째 배열(ROOT)의 인덱스를 가져온다  */
 #define SECTION_NR_TO_ROOT(sec)	((sec) / SECTIONS_PER_ROOT)
+
 /* mem_section 구조체 포인터의 첫번째(ROOT)배열의 총 인덱스 수 256K/256 = 1024  */
 #define NR_SECTION_ROOTS	DIV_ROUND_UP(NR_MEM_SECTIONS, SECTIONS_PER_ROOT)
-/* 섹션 ROOT 하나에 포함되는 mem_section 구조체 포인터의 두번째 배열전체 */
+
+/*  mem_section 구조체 포인터의 두번째 배열 index를 구하기 위한 mask */
 #define SECTION_ROOT_MASK	(SECTIONS_PER_ROOT - 1)
 
 /*
