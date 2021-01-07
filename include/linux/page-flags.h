@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Macros for manipulating and testing page->flags
+ * page->flags를 조작하고 테스트하기위한 매크로
  */
 
 #ifndef PAGE_FLAGS_H
@@ -15,86 +15,82 @@
 #endif /* !__GENERATING_BOUNDS_H */
 
 /*
- * Various page->flags bits:
+ * 다양한 page->flags 비트:
  *
- * PG_reserved is set for special pages. The "struct page" of such a page
- * should in general not be touched (e.g. set dirty) except by its owner.
- * Pages marked as PG_reserved include:
- * - Pages part of the kernel image (including vDSO) and similar (e.g. BIOS,
- *   initrd, HW tables)
- * - Pages reserved or allocated early during boot (before the page allocator
- *   was initialized). This includes (depending on the architecture) the
- *   initial vmemmap, initial page tables, crashkernel, elfcorehdr, and much
- *   much more. Once (if ever) freed, PG_reserved is cleared and they will
- *   be given to the page allocator.
- * - Pages falling into physical memory gaps - not IORESOURCE_SYSRAM. Trying
- *   to read/write these pages might end badly. Don't touch!
- * - The zero page(s)
- * - Pages not added to the page allocator when onlining a section because
- *   they were excluded via the online_page_callback() or because they are
- *   PG_hwpoison.
- * - Pages allocated in the context of kexec/kdump (loaded kernel image,
- *   control pages, vmcoreinfo)
- * - MMIO/DMA pages. Some architectures don't allow to ioremap pages that are
- *   not marked PG_reserved (as they might be in use by somebody else who does
- *   not respect the caching strategy).
- * - Pages part of an offline section (struct pages of offline sections should
- *   not be trusted as they will be initialized when first onlined).
- * - MCA pages on ia64
- * - Pages holding CPU notes for POWER Firmware Assisted Dump
- * - Device memory (e.g. PMEM, DAX, HMM)
- * Some PG_reserved pages will be excluded from the hibernation image.
- * PG_reserved does in general not hinder anybody from dumping or swapping
- * and is no longer required for remap_pfn_range(). ioremap might require it.
- * Consequently, PG_reserved for a page mapped into user space can indicate
- * the zero page, the vDSO, MMIO pages or device memory.
+ * PG_reserved는 특수 페이지에 설정된다. 이런한 페이지의 "페이지 구조체"는 일반적으로
+ * 소유자를 제외하고는 건드리지 않아야 한다.(예. dirty 설정)
+ * PG_reserved로 표시된 페이지는 다음과 같다.
+ * - 커널 이미지의 일부(vDSO 포함) 및 유사 페이지(예. 바이오스, initrd, HW 테이블)
+ * - 예약 되었거나 초기 부팅중에 할당된 페이지(페이지 할당자가 초기화되기전)
+ *   여기에는 초기 vmemmap, 초기 페이지 테이블, crashkernel, elfcorehdr, 등이
+ *   포함된다.(아키텍쳐에 따라 다름)
+ *   해제되면 PG_reserved는 지워지고 페이지 할당자에게 제공된다.
+ * - 물리 메모리 gap 에 있는 페이지 - IORESOURCE_SYSRAM 는 제외. 이 페이지들을
+ *   읽기/쓰기 를 시도하는 것은 좋지 않은 결과를 가져올 지 모른다. 건들지 마라.
+ * - zero 페이지
+ * - online_page_callback을 통해 제외 되었거나 PG_hwpoison 으로 인해 섹션을
+ *   온라인화 할때 페이지 할당자가 추가하지 않은 페이지
+ * - kexec/kdump context 에서 할당된 페이지 (로드된 커널 이미지,
+ *   제어 페이지, vmcoreinfo)
+ * - MMIO/DMA 페이지. 일부 아키텍쳐는 PG_reserved 로 표시되지 않은 페이지는 ioremap을
+ *   허용하지 않는다. (이페이지들은 캐싱 전략을 존중하지 않은 누군가에 의해 사용
+ *   되고 있을수 있으므로)
+ * - 오프라인 섹션의 부분인 페이지 (오프라인 섹션의 페이지 구조체는 처음 온라인 상태일 때
+ *   초기화 되므로 신뢰해서는 안된다)
+ * - ia64의 MCA 페이지
+ * - POWER Firmware Assisted Dump을 위한 CPU 노트를 가진 페이지
+ * - 디바이스 메모리(예. PMEM, DAX, HMM)
  *
- * The PG_private bitflag is set on pagecache pages if they contain filesystem
- * specific data (which is normally at page->private). It can be used by
- * private allocations for its own usage.
+ * 일부 PG_reserved 페이지는 최대절전모드 이미지에서 제외된다.
+ * PG_reserved 는 보통 누구에게도 dumping 이나 swapping 을 방해하지 않고
+ * 더이상 remap_pfn_range 가 필요없다. ioremap 이 필요할 수 있다.
+ * 따라서 유저 영역에 맵핑된 페이지의 PG_reserved는 zero page, vDSO, MMIO 페이지나
+ * 디바이스 메모리를 나타낼 수 있다.
  *
- * During initiation of disk I/O, PG_locked is set. This bit is set before I/O
- * and cleared when writeback _starts_ or when read _completes_. PG_writeback
- * is set before writeback starts and cleared when it finishes.
+ * PG_private 비트플래그는 페이지캐쉬 페이지에 파일시스템 특정 데이터를 포함하는 경우
+ * 설정된다. (보통 page->private 에 있는). 자체 사용을 위한 개인 할당에 사용되어진다.
  *
- * PG_locked also pins a page in pagecache, and blocks truncation of the file
- * while it is held.
+ * 디스크 I/O의 초기화 중 PG_locked 는 설정된다. 이 비트는 I/O 전에 설정되고
+ * writeback이 _starts_ 나 read가 _completes_ 일때 제거된다.
+ * PG_writeback은 writeback 시작 전에 설정되고 끝날때 제거된다.
  *
- * page_waitqueue(page) is a wait queue of all tasks waiting for the page
- * to become unlocked.
+ * PG_locked는 페이지캐쉬에 페이지를 고정하고 파일이 보관되는 동안 파일의 잘림을 막는다.(?)
  *
- * PG_uptodate tells whether the page's contents is valid.  When a read
- * completes, the page becomes uptodate, unless a disk I/O error happened.
+ * page_waitqueue는 페이지가 잠금 해제 되려고 기다리는 모든 작업의 대기열이다.
  *
- * PG_referenced, PG_reclaim are used for page reclaim for anonymous and
- * file-backed pagecache (see mm/vmscan.c).
+ * PG_uptodate는 페이지의 내용이 유효한지를 나타낸다. 디스크 I/O 에러 없이
+ * 읽기 완료되면 페이지는 최신상태(uptodate)된다.
  *
- * PG_error is set to indicate that an I/O error occurred on this page.
+ * PG_referenced, PG_reclaim 는 익명(anonymous) 과 file-backed 페이지캐쉬를 위한
+ * 페이지 회수를 위해 사용된다. (mm/vmscan.c 참조)
  *
- * PG_arch_1 is an architecture specific page state bit.  The generic code
- * guarantees that this bit is cleared for a page when it first is entered into
- * the page cache.
+ * PG_error 는 이 페이지에 I/O 에러가 발생했는지를 나타내려고 설정한다.
  *
- * PG_hwpoison indicates that a page got corrupted in hardware and contains
- * data with incorrect ECC bits that triggered a machine check. Accessing is
- * not safe since it may cause another machine check. Don't touch!
+ * PG_arch_1은 아키텍쳐 특정 페이지 상태 비트이다. 일반 코드는 페이지 캐쉬에 처음
+ * 입력될 때 페이지의 이 비트가 지워짐을 보장한다.
+ *
+ * PG_hwpoison 은 page에 하드웨어 오류가 있고 machine check에서 야기된
+ * 올바르지 않은 ECC bits를 가진 데이터를 포함함을 나타낸다. 또다른 machine check를
+ * 유발할 수 있으므로 접근은 안전하지 않다. 건드리지 마라.!
  */
 
 /*
- * Don't use the *_dontuse flags.  Use the macros.  Otherwise you'll break
- * locked- and dirty-page accounting.
+ * *_dontuse flag를 사용하지 말라. 매크로를 사용하라. 그렇지 않으면
+ * locked- 와 dirty-page accounting 이 깨진다.
  *
  * The page flags field is split into two parts, the main flags area
  * which extends from the low bits upwards, and the fields area which
  * extends from the high bits downwards.
+ * page flags 필드는 두부분으로 나눠지는데, 주 flag 영역은 하위 비트에서 상위로
+ * 확장하고,  fields 영역은 상위 비트에서 아래로 확장한다.
  *
  *  | FIELD | ... | FLAGS |
  *  N-1           ^       0
  *               (NR_PAGEFLAGS)
  *
- * The fields area is reserved for fields mapping zone, node (for NUMA) and
- * SPARSEMEM section (for variants of SPARSEMEM that require section ids like
- * SPARSEMEM_EXTREME with !SPARSEMEM_VMEMMAP).
+ * fields 영역은 fields 매핑 영역, node(for NUMA), SPARSEMEM 섹션을 위해 예약된다.
+ * (SPARSEMEM_VMEMMAP이 아닌 SPARSEMEM_EXTREME 같은 섹션아이디를 필요로 하는
+ * SPARSEMEM 의 변형을 위함)
  */
 enum pageflags {
 	PG_locked,		/* Page is locked. Don't touch. */
@@ -167,6 +163,12 @@ enum pageflags {
 
 struct page;	/* forward declaration */
 
+/*
+ * page의 compound_head 멤버변수의 0번비트가 1이면 compound 페이지의
+ * tail 페이지이다. tail 페이지일 경우는 compound_head 에서 1을
+ * 빼서 compound 페이지의 head 페이지 주소를 반환하고
+ * 그렇지 않으면 넘어온 매개변수 페이지를 그래도 반환한다.
+ */
 static inline struct page *compound_head(struct page *page)
 {
 	unsigned long head = READ_ONCE(page->compound_head);
@@ -176,11 +178,13 @@ static inline struct page *compound_head(struct page *page)
 	return page;
 }
 
+/* compound_head 의 0번 비트가 1이면 tail 페이지이다. tail 페이지이면 1 아니면 0 반환 */
 static __always_inline int PageTail(struct page *page)
 {
 	return READ_ONCE(page->compound_head) & 1;
 }
 
+/* compound head 나 tail 페이지 일 경우 1 반환 아니면 0 반환 */
 static __always_inline int PageCompound(struct page *page)
 {
 	return test_bit(PG_head, &page->flags) || PageTail(page);
@@ -201,27 +205,26 @@ static inline void page_init_poison(struct page *page, size_t size)
 #endif
 
 /*
- * Page flags policies wrt compound pages
+ * 페이지 flags 정책 wrt compound 페이지
  *
  * PF_POISONED_CHECK
- *     check if this struct page poisoned/uninitialized
+ *     이 페이지 구조체가 감염/초기화안됨 을 확인
  *
  * PF_ANY:
- *     the page flag is relevant for small, head and tail pages.
+ *     페이지 flag가 small, head, 와 tail 페이지에 관련
  *
  * PF_HEAD:
- *     for compound page all operations related to the page flag applied to
- *     head page.
+ *     compound 페이지의 경우, 페이지 flag에 관련된 모든 동작이 head 페이지에 적용된다
  *
  * PF_ONLY_HEAD:
- *     for compound page, callers only ever operate on the head page.
+ *     compound 페이지의 경우 호출자는 head 페이지서만 작동한다.
  *
  * PF_NO_TAIL:
- *     modifications of the page flag must be done on small or head pages,
- *     checks can be done on tail pages too.
+ *     페이지 flag의 변경은 small 이나 head 페이지 에서만 하여야 한다.
+ *     검사는 tail 페이지 에서도 수행 될 수 있다.
  *
  * PF_NO_COMPOUND:
- *     the page flag is not relevant for compound pages.
+ *     페이지 flag는 compound 페이지와 관련이 없다.
  */
 #define PF_POISONED_CHECK(page) ({					\
 		VM_BUG_ON_PGFLAGS(PagePoisoned(page), page);		\
@@ -239,7 +242,7 @@ static inline void page_init_poison(struct page *page, size_t size)
 		PF_POISONED_CHECK(page); })
 
 /*
- * Macros to create function definitions for page flags
+ * page flags에 대한 함수 정의를 만드는 매크로
  */
 #define TESTPAGEFLAG(uname, lname, policy)				\
 static __always_inline int Page##uname(struct page *page)		\

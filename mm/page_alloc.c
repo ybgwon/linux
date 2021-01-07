@@ -606,17 +606,19 @@ out:
 
 /*
  * Higher-order pages are called "compound pages".  They are structured thusly:
+ * 높은 orderd의 페이지를 "compound pages"라고 한다. 다음과 같이 구조화 된다.
  *
  * The first PAGE_SIZE page is called the "head page" and have PG_head set.
+ * 첫번째 PAGE_SIZE 의 페이지는 "head page"로 불리고 PG_head 설정이 있다.
  *
- * The remaining PAGE_SIZE pages are called "tail pages". PageTail() is encoded
- * in bit 0 of page->compound_head. The rest of bits is pointer to head page.
+ * 나머지 PAGE_SIZE 페이지들은 "tail pages"라고 한다. PageTail은 page->compound_head
+ * 의 0번 비트에 인코딩된다. 나머지 비트는 head page의 포이터이다.
  *
- * The first tail page's ->compound_dtor holds the offset in array of compound
- * page destructors. See compound_page_dtors.
+ * 첫번째 tail 페이지의 compound_dtor(멤버변수)는 compound 페이지 소멸자(destructors)
+ * 배열의 위치를 가진다. compound_page_dtors를 참조하라
  *
- * The first tail page's ->compound_order holds the order of allocation.
- * This usage means that zero-order pages may not be compound.
+ * 첫번째 tail 페이지의 compound_order는 할당 order를 가진다.
+ * 이러한 사용은 zero-order 페이지는 compound가 아닐 수 있음을 의미한다.(?)
  */
 
 void free_compound_page(struct page *page)

@@ -916,12 +916,16 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 
 		/*
 		 * 검사는 락이 없을 수 있지만 후에 재검사 하므로 괜찮다.
-		 * migrage LRU 와 non-lru movable 페이지 외에는 건너뛰라.
+		 * migrate LRU 와 non-lru movable 페이지 외에는 건너뛰라.
 		 */
 		if (!PageLRU(page)) {
 			/*
 			 * __PageMovable can return false positive so we need
 			 * to verify it under page_lock.
+			 */
+			/*
+			 * __PageMovable은 거짓 긍정을 반환할 수 있으므로
+			 * page_lock 에서 확인해야 한다.
 			 */
 			if (unlikely(__PageMovable(page)) &&
 					!PageIsolated(page)) {

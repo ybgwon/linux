@@ -8,11 +8,12 @@
 #define BUILD_BUG_ON_ZERO(e) (0)
 #else /* __CHECKER__ */
 /*
- * Force a compilation error if condition is true, but also produce a
- * result (of value 0 and type size_t), so the expression can be used
- * e.g. in a structure initializer (or where-ever else comma expressions
- * aren't permitted).
+ * 조건이 참이면 컴파일 에러를 강제한다. 그러나 결과(값 0 와 size_t 유형)도 생성하므로
+ * 표현식은 예. 구조체 initializer 에 사용될 수 있다.(또는 다른 곳에서는 쉼표식이
+ * 허용되지 않음?)
  */
+// 매크로명이 BUILD BUG OR ZERO가 되어야 한다. 조건 e가 참이면 컴파일 에러.
+// 아니면 0으로 대체된다.
 #define BUILD_BUG_ON_ZERO(e) (sizeof(struct { int:(-!!(e)); }))
 #endif /* __CHECKER__ */
 
@@ -23,10 +24,10 @@
 	BUILD_BUG_ON((n) == 0 || (((n) & ((n) - 1)) != 0))
 
 /*
- * BUILD_BUG_ON_INVALID() permits the compiler to check the validity of the
- * expression but avoids the generation of any code, even if that expression
- * has side-effects.
+ * BUILD_BUG_ON_INVALID는 컴파일러가 표현식의 유효성을 검사하도록 한다.
+ * 그러나 해당 식에 부작용이 있더라도 코드를 생성하는 것은 피한다.
  */
+// FIXME. overflow를 검사하는지 잘 모르겠다.
 #define BUILD_BUG_ON_INVALID(e) ((void)(sizeof((__force long)(e))))
 
 /**
