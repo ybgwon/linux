@@ -9,9 +9,8 @@
  * @nr: the bit to set
  * @addr: the address to start counting from
  *
- * Unlike set_bit(), this function is non-atomic and may be reordered.
- * If it's called on the same region of memory simultaneously, the effect
- * may be that only one operation succeeds.
+ * setbit와 달리 이 함수는 원자적이 아니고 순서를 변경할 수 있다. 동일 메모리영역에서
+ * 동시에 호출된다면 하나의 동작만 성공할 수 있다.
  */
 static inline void __set_bit(int nr, volatile unsigned long *addr)
 {

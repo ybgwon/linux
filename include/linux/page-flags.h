@@ -244,22 +244,46 @@ static inline void page_init_poison(struct page *page, size_t size)
 /*
  * page flags에 대한 함수 정의를 만드는 매크로
  */
+/*
+ * PageUNAME 함수를 만드는 매크로. 페이지의 flags 멤버 변수에 PG_lname 비트가
+ * 설정되었으면 1을 반환. 세번째 매개변수 policy는 위 PF_* 매크로가 반환하는 페이지이다.
+ * enforce는 0로 설정된다.
+ * ex. PGLRU(page) page->flags의 PG_lru(4번)비트가 설정되었으면 1을 반환
+ */
 #define TESTPAGEFLAG(uname, lname, policy)				\
 static __always_inline int Page##uname(struct page *page)		\
 	{ return test_bit(PG_##lname, &policy(page, 0)->flags); }
 
+/*
+ * SetPageUNAME 함수를 만드는 매크로. 페이지의 flags멤버 변수에 PG_lname 비트를
+ * 설정한다. 세번째 매개변수 policy는 위 PF_* 매크로가 반환하는 페이지이다.
+ * enforce는 1로 설정된다
+ * ex. SetPageLRU(page) page->flags의 PG_lru(4번)비트를 설정.
+ */
 #define SETPAGEFLAG(uname, lname, policy)				\
 static __always_inline void SetPage##uname(struct page *page)		\
 	{ set_bit(PG_##lname, &policy(page, 1)->flags); }
 
+/*
+ * ClearPageUNAME 함수를 만드는 매크로. 페이지의 flags멤버 변수에 PG_lname 비트를
+ * 지운다. 세번째 매개변수 policy는 위 PF_* 매크로가 반환하는 페이지이다.
+ * enforce는 1로 설정된다
+ * ex. ClearPageLRU(page) page->flags의 PG_lru(4번)비트를 지움.
+ */
 #define CLEARPAGEFLAG(uname, lname, policy)				\
 static __always_inline void ClearPage##uname(struct page *page)		\
 	{ clear_bit(PG_##lname, &policy(page, 1)->flags); }
 
+/*
+ * __SetPageUNAME 함수를 만드는 매크로. SetPageUNAME 과 같지만 원자적이 아니다.
+ */
 #define __SETPAGEFLAG(uname, lname, policy)				\
 static __always_inline void __SetPage##uname(struct page *page)		\
 	{ __set_bit(PG_##lname, &policy(page, 1)->flags); }
 
+/*
+ * __ClearPageUNAME 함수를 만드는 매크로. ClearPageUNAME 과 같지만 원자적이 아니다.
+ */
 #define __CLEARPAGEFLAG(uname, lname, policy)				\
 static __always_inline void __ClearPage##uname(struct page *page)	\
 	{ __clear_bit(PG_##lname, &policy(page, 1)->flags); }
