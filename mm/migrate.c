@@ -86,13 +86,13 @@ int isolate_movable_page(struct page *page, isolate_mode_t mode)
 	struct address_space *mapping;
 
 	/*
-	 * Avoid burning cycles with pages that are yet under __free_pages(),
-	 * or just got freed under us.
+	 * 아직 __free_pages함수 아래 있는 페이지들과 여기에서 막 해제된 페이지들을 사용하여
+	 * burning 사이클을 피하라.
 	 *
-	 * In case we 'win' a race for a movable page being freed under us and
-	 * raise its refcount preventing __free_pages() from doing its job
-	 * the put_page() at the end of this block will take care of
-	 * release this page, thus avoiding a nasty leakage.
+	 * 여기에서 해제되는 movable 페이지가 경쟁에서 승리하고 이 블록의 마지막에
+	 * __free_pages함수가 작업을 수행하는 것을 막으려고 refcount를
+	 * 올리면 이 블록의 끝에 있는 put_page함수가 이 페이지를 해제하여
+	 * 메모리 누수를 방지한다.
 	 */
 	if (unlikely(!get_page_unless_zero(page)))
 		goto out;

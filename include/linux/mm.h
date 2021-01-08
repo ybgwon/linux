@@ -549,10 +549,8 @@ static inline int put_page_testzero(struct page *page)
 }
 
 /*
- * Try to grab a ref unless the page has a refcount of zero, return false if
- * that is the case.
- * This can be called when MMU is off so it must not access
- * any of the virtual mappings.
+ * 페이지 refcount가 0 이 아니면 1을 더하고 0이면 false 반환
+ * MMU가 off일때 이 함수가 호출되므로 가상 매핑의 어떤 것도 접근해서는 안된다.
  */
 static inline int get_page_unless_zero(struct page *page)
 {

@@ -920,11 +920,7 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 		 */
 		if (!PageLRU(page)) {
 			/*
-			 * __PageMovable can return false positive so we need
-			 * to verify it under page_lock.
-			 */
-			/*
-			 * __PageMovable은 거짓 긍정을 반환할 수 있으므로
+			 * __PageMovable은 오탐을 반환할 수 있으므로
 			 * page_lock 에서 확인해야 한다.
 			 */
 			if (unlikely(__PageMovable(page)) &&
@@ -1775,10 +1771,6 @@ static isolate_migrate_t isolate_migratepages(struct zone *zone,
 	/* Only scan within a pageblock boundary */
 	block_end_pfn = pageblock_end_pfn(low_pfn);
 
-	/*
-	 * Iterate over whole pageblocks until we find the first suitable.
-	 * Do not cross the free scanner.
-	 */
 	/*
 	 * 첫번째 적합 요소를 찾을 때까지 모든 페이지블록을 반복하라.
 	 * free scaner를 침범하지 마라.
