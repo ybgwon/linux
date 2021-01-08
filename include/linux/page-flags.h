@@ -245,7 +245,7 @@ static inline void page_init_poison(struct page *page, size_t size)
  * page flags에 대한 함수 정의를 만드는 매크로
  */
 /*
- * PageUNAME 함수를 만드는 매크로. 페이지의 flags 멤버 변수에 PG_lname 비트가
+ * PageUname 함수를 만드는 매크로. 페이지의 flags 멤버 변수에 PG_lname 비트가
  * 설정되었으면 1을 반환. 세번째 매개변수 policy는 위 PF_* 매크로가 반환하는 페이지이다.
  * enforce는 0로 설정된다.
  * ex. PGLRU(page) page->flags의 PG_lru(4번)비트가 설정되었으면 1을 반환
@@ -255,7 +255,7 @@ static __always_inline int Page##uname(struct page *page)		\
 	{ return test_bit(PG_##lname, &policy(page, 0)->flags); }
 
 /*
- * SetPageUNAME 함수를 만드는 매크로. 페이지의 flags멤버 변수에 PG_lname 비트를
+ * SetPageUname 함수를 만드는 매크로. 페이지의 flags멤버 변수에 PG_lname 비트를
  * 설정한다. 세번째 매개변수 policy는 위 PF_* 매크로가 반환하는 페이지이다.
  * enforce는 1로 설정된다
  * ex. SetPageLRU(page) page->flags의 PG_lru(4번)비트를 설정.
@@ -265,7 +265,7 @@ static __always_inline void SetPage##uname(struct page *page)		\
 	{ set_bit(PG_##lname, &policy(page, 1)->flags); }
 
 /*
- * ClearPageUNAME 함수를 만드는 매크로. 페이지의 flags멤버 변수에 PG_lname 비트를
+ * ClearPageUname 함수를 만드는 매크로. 페이지의 flags멤버 변수에 PG_lname 비트를
  * 지운다. 세번째 매개변수 policy는 위 PF_* 매크로가 반환하는 페이지이다.
  * enforce는 1로 설정된다
  * ex. ClearPageLRU(page) page->flags의 PG_lru(4번)비트를 지움.
@@ -275,27 +275,44 @@ static __always_inline void ClearPage##uname(struct page *page)		\
 	{ clear_bit(PG_##lname, &policy(page, 1)->flags); }
 
 /*
- * __SetPageUNAME 함수를 만드는 매크로. SetPageUNAME 과 같지만 원자적이 아니다.
+ * __SetPageUname 함수를 만드는 매크로. SetPageUname 과 같지만 원자적이 아니다.
  */
 #define __SETPAGEFLAG(uname, lname, policy)				\
 static __always_inline void __SetPage##uname(struct page *page)		\
 	{ __set_bit(PG_##lname, &policy(page, 1)->flags); }
 
 /*
- * __ClearPageUNAME 함수를 만드는 매크로. ClearPageUNAME 과 같지만 원자적이 아니다.
+ * __ClearPageUname 함수를 만드는 매크로. ClearPageUname 과 같지만 원자적이 아니다.
  */
 #define __CLEARPAGEFLAG(uname, lname, policy)				\
 static __always_inline void __ClearPage##uname(struct page *page)	\
 	{ __clear_bit(PG_##lname, &policy(page, 1)->flags); }
 
+/*
+ * TestSetPageUname 함수를 만드는 매크로. PG_lname에 해당하는 bit를 설정하고
+ * 해당 비트의 원래 값을 반환한다. enforce는 1로 설정
+ * ex. TestSetPageLRU(page) page->flags의 PG_lru(4번)비트를 설정하고
+ * 원래 PG_lru(4번)비트에 설정된 값 반환.
+ */
 #define TESTSETFLAG(uname, lname, policy)				\
 static __always_inline int TestSetPage##uname(struct page *page)	\
 	{ return test_and_set_bit(PG_##lname, &policy(page, 1)->flags); }
 
+/*
+ * TestClearPageUname 함수를 만드는 매크로. PG_lname에 해당하는 bit를 지우고
+ * 해당 비트의 원래 값을 반환한다. enforce는 1로 설정
+ * ex. TestCleartPageLRU(page) page->flags의 PG_lru(4번)비트를 지우고
+ * 원래 PG_lru(4번)비트에 설정된 값 반환.
+ */
 #define TESTCLEARFLAG(uname, lname, policy)				\
 static __always_inline int TestClearPage##uname(struct page *page)	\
 	{ return test_and_clear_bit(PG_##lname, &policy(page, 1)->flags); }
 
+/*
+ * PAGEFLAG 매크로를 사용하여 PageUname, SetPageUname, ClearPageUname 세개
+ * 함수를 만든다. __PAGEFLAG 매크로는 같은 종류의 non-atomic 함수를 만든다.
+ * TESTSCFLAG 는 이전 값을 반환하므로 테스트 함수는 뺀 2가지만 만든다.
+ */
 #define PAGEFLAG(uname, lname, policy)					\
 	TESTPAGEFLAG(uname, lname, policy)				\
 	SETPAGEFLAG(uname, lname, policy)				\
@@ -310,6 +327,7 @@ static __always_inline int TestClearPage##uname(struct page *page)	\
 	TESTSETFLAG(uname, lname, policy)				\
 	TESTCLEARFLAG(uname, lname, policy)
 
+/* 무조건 0을 반환하는 PageUname 함수와 빈 Set, Clear 함수를 만든다 */
 #define TESTPAGEFLAG_FALSE(uname)					\
 static inline int Page##uname(const struct page *page) { return 0; }
 
@@ -365,9 +383,8 @@ PAGEFLAG(SwapBacked, swapbacked, PF_NO_TAIL)
 	__SETPAGEFLAG(SwapBacked, swapbacked, PF_NO_TAIL)
 
 /*
- * Private page markings that may be used by the filesystem that owns the page
- * for its own purposes.
- * - PG_private and PG_private_2 cause releasepage() and co to be invoked
+ * 자체 목적으로 페이지를 소유하는 파일 시스템에서 사용할 수있는 Private 페이지 표시
+ * PG_private 와 PG_private_2로 인해 releasepage()및 co 가 호출된다.
  */
 PAGEFLAG(Private, private, PF_ANY) __SETPAGEFLAG(Private, private, PF_ANY)
 	__CLEARPAGEFLAG(Private, private, PF_ANY)
@@ -376,14 +393,14 @@ PAGEFLAG(OwnerPriv1, owner_priv_1, PF_ANY)
 	TESTCLEARFLAG(OwnerPriv1, owner_priv_1, PF_ANY)
 
 /*
- * Only test-and-set exist for PG_writeback.  The unconditional operators are
- * risky: they bypass page accounting.
+ * PG_writeback에 대한 test-and-set만 존재한다. 무조적적인 명령들은
+ * 위험하다. : 페이지 감사를 건너뛴다.
  */
 TESTPAGEFLAG(Writeback, writeback, PF_NO_TAIL)
 	TESTSCFLAG(Writeback, writeback, PF_NO_TAIL)
 PAGEFLAG(MappedToDisk, mappedtodisk, PF_NO_TAIL)
 
-/* PG_readahead is only used for reads; PG_reclaim is only for writes */
+/* PG_readahead 는 읽기에만 사용된다; PG_reclaim은 쓰기전용이다. */
 PAGEFLAG(Reclaim, reclaim, PF_NO_TAIL)
 	TESTCLEARFLAG(Reclaim, reclaim, PF_NO_TAIL)
 PAGEFLAG(Readahead, reclaim, PF_NO_COMPOUND)
@@ -455,38 +472,44 @@ PAGEFLAG(Idle, idle, PF_ANY)
 #endif
 
 /*
- * On an anonymous page mapped into a user virtual memory area,
- * page->mapping points to its anon_vma, not to a struct address_space;
- * with the PAGE_MAPPING_ANON bit set to distinguish it.  See rmap.h.
+ * 사용자 가상 메모리 영역에 매핑 된 익명 페이지에서 page->mapping은 그것을 구분하기 위한
+ * PAGE_MAPPING_ANON 비트 설정과 함께 address_space 구조체가 아닌 anon_vma를 가리킨다.
+ * rmap.h 참조
  *
- * On an anonymous page in a VM_MERGEABLE area, if CONFIG_KSM is enabled,
- * the PAGE_MAPPING_MOVABLE bit may be set along with the PAGE_MAPPING_ANON
- * bit; and then page->mapping points, not to an anon_vma, but to a private
- * structure which KSM associates with that merged page.  See ksm.h.
+ * VM_MERGEABLE 영역의 익명 페이지는 만약 CONFIG_KSM이 활성화 되었다면
+ * PAGE_MAPPING_MOVABLE 비트가 PAGE_MAPPING_ANON 비트와 함께 설정 될 수 있다.
+ * page->mapping 은 anon_vma 가 아니라 KSM이 병합된 페이지와 함께 관련한
+ * private 구조체를 가리킨다. ksm.h 참조
  *
- * PAGE_MAPPING_KSM without PAGE_MAPPING_ANON is used for non-lru movable
- * page and then page->mapping points a struct address_space.
+ * PAGE_MAPPING_ANON 이 없는 PAGE_MAPPING_KSM은 non-lru movable 페이지를 위해
+ * 사용되고 page->mapping 은 address_space 구조체를 가리킨다.
  *
- * Please note that, confusingly, "page_mapping" refers to the inode
- * address_space which maps the page from disk; whereas "page_mapped"
- * refers to user virtual address space into which the page is mapped.
+ * 디스크로부터 페이지를 매핑하여 inode address_space에연관된 "page_mapping"과
+ * 페이지가 매핑되는 사용자 가상 주소 영역과 연관된 "page mapped"가
+ * 혼동하지 않게 주의하세요
  */
 #define PAGE_MAPPING_ANON	0x1
 #define PAGE_MAPPING_MOVABLE	0x2
 #define PAGE_MAPPING_KSM	(PAGE_MAPPING_ANON | PAGE_MAPPING_MOVABLE)
 #define PAGE_MAPPING_FLAGS	(PAGE_MAPPING_ANON | PAGE_MAPPING_MOVABLE)
 
+/* PAGE_MAPPING_ANON나 PAGE_MAPPING_MOVABLE이 설정 되었으면 1 반환 */
 static __always_inline int PageMappingFlags(struct page *page)
 {
 	return ((unsigned long)page->mapping & PAGE_MAPPING_FLAGS) != 0;
 }
 
+/* PAGE_MAPPING_ANON 가 설정되었으면 1 반환 */
 static __always_inline int PageAnon(struct page *page)
 {
 	page = compound_head(page);
 	return ((unsigned long)page->mapping & PAGE_MAPPING_ANON) != 0;
 }
 
+/*
+ * PAGE_MAPPING_ANON는 설정되지 않고 PAGE_MAPPING_MOVABLE만
+ * 설정되었을시(non-lru movable 페이지) 1 반환
+ */
 static __always_inline int __PageMovable(struct page *page)
 {
 	return ((unsigned long)page->mapping & PAGE_MAPPING_FLAGS) ==
@@ -518,12 +541,11 @@ static inline int PageUptodate(struct page *page)
 	page = compound_head(page);
 	ret = test_bit(PG_uptodate, &(page)->flags);
 	/*
-	 * Must ensure that the data we read out of the page is loaded
-	 * _after_ we've loaded page->flags to check for PageUptodate.
-	 * We can skip the barrier if the page is not uptodate, because
-	 * we wouldn't be reading anything from it.
+	 * 페이지 에서 읽은 데이터는 PageUptodate를 검사하기 위해 page->flags를
+	 * 로드한 후에 로드되었다는 것을 보장해야 한다. 만약 페이지가 uptodate가
+	 * 아니면 아무것도 읽고 있지 않을것이므로 배리어를 건너뛸 수 있다.
 	 *
-	 * See SetPageUptodate() for the other side of the story.
+	 * 다른부분을 확인 하려면 SetPageUptodate 참조
 	 */
 	if (ret)
 		smp_rmb();
@@ -542,9 +564,9 @@ static __always_inline void SetPageUptodate(struct page *page)
 {
 	VM_BUG_ON_PAGE(PageTail(page), page);
 	/*
-	 * Memory barrier must be issued before setting the PG_uptodate bit,
-	 * so that all previous stores issued in order to bring the page
-	 * uptodate are actually visible before PageUptodate becomes true.
+	 * 메모리 배리어는 PG_uptodate 비트가 설정되기 전에 발행되어야 한다.
+	 * 그러면 PageUptodate가 true가 되기 전에 페이지를 최신으로 만들기 위해
+	 * 발행된 모든 이전 저장은 실제로 표시된다.
 	 */
 	smp_wmb();
 	set_bit(PG_uptodate, &page->flags);
@@ -609,12 +631,12 @@ static inline bool page_huge_active(struct page *page)
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 /*
- * PageHuge() only returns true for hugetlbfs pages, but not for
- * normal or transparent huge pages.
+ * PageHuge 는 normal 이나 transparent huge pages가 아닌 hugetlbfs 페이지에
+ * true를 반환한다.
  *
- * PageTransHuge() returns true for both transparent huge and
- * hugetlbfs pages, but not normal pages. PageTransHuge() can only be
- * called only in the core VM paths where hugetlbfs pages can't exist.
+ * PageTransHuge는 transparent huge와 hugetlbfs 페이지 모두 true를 반환하고
+ * normal 페이지는 아니다. PageTransHuge는 hugetlbfs 페이지가 존재할 수 없는
+ * core VM 경로에서만 호출 할 수 있다.
  */
 static inline int PageTransHuge(struct page *page)
 {
@@ -623,9 +645,9 @@ static inline int PageTransHuge(struct page *page)
 }
 
 /*
- * PageTransCompound returns true for both transparent huge pages
- * and hugetlbfs pages, so it should only be called when it's known
- * that hugetlbfs pages aren't involved.
+ * PagesTransCompound 는 transparent huge 와 hugetlbfs 페이지 모두에
+ * true 를 반환한다. hugetlbfs 페이지가 관련되지 않은것으로 알려진 경우에만
+ * 호출해야 한다.
  */
 static inline int PageTransCompound(struct page *page)
 {
@@ -633,20 +655,17 @@ static inline int PageTransCompound(struct page *page)
 }
 
 /*
- * PageTransCompoundMap is the same as PageTransCompound, but it also
- * guarantees the primary MMU has the entire compound page mapped
- * through pmd_trans_huge, which in turn guarantees the secondary MMUs
- * can also map the entire compound page. This allows the secondary
- * MMUs to call get_user_pages() only once for each compound page and
- * to immediately map the entire compound page with a single secondary
- * MMU fault. If there will be a pmd split later, the secondary MMUs
- * will get an update through the MMU notifier invalidation through
- * split_huge_pmd().
+ * PageTransCompoundMap은 PageTransCompound와 같지만 기본 MMU가
+ * pmd_trans_huge를 통해 매핑된 전체 compound 페이지가 있음을 보장한다.
+ * 따라서 보조 MMU도 전체 compound 페이지를 매핑할 수 있음을 보장한다.
+ * 이것은 보조 MMU가 각각의 compound 페이지에 get_user_pages를
+ * 한번만 호출하고, 단일 보조 MMU 실패와 함께 전체 compound 페이지가
+ * 즉시 매핑되도록 한다. pmd가 후에 분리 되더라도 보조 MMU는
+ * split_hug_pmd를 통한 MMU notifies invalidation을 통해 업데이트 된다.
  *
- * Unlike PageTransCompound, this is safe to be called only while
- * split_huge_pmd() cannot run from under us, like if protected by the
- * MMU notifier, otherwise it may result in page->_mapcount < 0 false
- * positives.
+ * PageTransCompound와 달리 MMU notifiers에 의해 보호되는 것처럼
+ * split_huge_pmd가 실행될 수 없을 때 호출 하는 것이 안전하다. 그렇지 않으면
+ * page->mapcount < 0 오탐이 발생할 수 있다.
  */
 static inline int PageTransCompoundMap(struct page *page)
 {
@@ -654,9 +673,8 @@ static inline int PageTransCompoundMap(struct page *page)
 }
 
 /*
- * PageTransTail returns true for both transparent huge pages
- * and hugetlbfs pages, so it should only be called when it's known
- * that hugetlbfs pages aren't involved.
+ * PagesTransTail은 transparent huge와 hugetlbfs 페이지 모두 true를 반환한다.
+ * 따라서 hugetlbfs 페이지와 관련없음으로 알려진 경우에만 호출해야 한다
  */
 static inline int PageTransTail(struct page *page)
 {
@@ -664,17 +682,15 @@ static inline int PageTransTail(struct page *page)
 }
 
 /*
- * PageDoubleMap indicates that the compound page is mapped with PTEs as well
- * as PMDs.
+ * PageDoubleMap은 compound 페이지가 PTE와 PMD로 매핑되었을 음을 나타낸다.
  *
- * This is required for optimization of rmap operations for THP: we can postpone
- * per small page mapcount accounting (and its overhead from atomic operations)
- * until the first PMD split.
+ * 이는 THP에 rmap작업의 최적화를 위해 필요하다. 첫번째 PMD 분활전까지 작은 페이지당
+ * mapcount 세기를 연기할 수 있다.(및 atomic 명령의 부작용)
  *
- * For the page PageDoubleMap means ->_mapcount in all sub-pages is offset up
- * by one. This reference will go away with last compound_mapcount.
+ * 페이지에서 PageDoublemap은 모든 하위 페이지의 _mapcount가 1 만큼 오프셋됨을
+ * 의미한다. . 이 참조는 마지막 compound_mapcount와 함께 사라진다.
  *
- * See also __split_huge_pmd_locked() and page_remove_anon_compound_rmap().
+ * __split_huge_pmd_locked() and page_remove_anon_compound_rmap() 참조
  */
 static inline int PageDoubleMap(struct page *page)
 {
@@ -715,14 +731,12 @@ PAGEFLAG_FALSE(DoubleMap)
 #endif
 
 /*
- * For pages that are never mapped to userspace (and aren't PageSlab),
- * page_type may be used.  Because it is initialised to -1, we invert the
- * sense of the bit, so __SetPageFoo *clears* the bit used for PageFoo, and
- * __ClearPageFoo *sets* the bit used for PageFoo.  We reserve a few high and
- * low bits so that an underflow or overflow of page_mapcount() won't be
- * mistaken for a page type value.
+ * 유저영역에 매핑된적 없는 페이지(및 PageSlab 이 아닌), page_type을 사용할 수 있다.
+ * -1로 초기화 되므로 비트를 반전한다. 그래서 __SetPageFoo는 PageFoo 가 사용하는
+ * 비트를 지우고 __ClearPageFoo는 PageFoo가 사용하는 비트를 설정한다. 몇개의 상위
+ * 하위 비트를 예약함으로서 page_mapcount의 underflow나 overflow 가
+ * 페이지 type 값으로 오인되지 않도록 한다.
  */
-
 #define PAGE_TYPE_BASE	0xf0000000
 /* Reserve		0x0000007f to catch underflows of page_mapcount */
 #define PAGE_MAPCOUNT_RESERVE	-128
@@ -731,6 +745,7 @@ PAGEFLAG_FALSE(DoubleMap)
 #define PG_kmemcg	0x00000200
 #define PG_table	0x00000400
 
+/* page가 flag 타입이면 true. */
 #define PageType(page, flag)						\
 	((page->page_type & (PAGE_TYPE_BASE | flag)) == PAGE_TYPE_BASE)
 
