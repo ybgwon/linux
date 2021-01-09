@@ -312,9 +312,8 @@ __reset_isolation_pfn(struct zone *zone, unsigned long pfn, bool check_source,
 }
 
 /*
- * This function is called to clear all cached information on pageblocks that
- * should be skipped for page isolation when the migrate and free page scanner
- * meet.
+ * 이 함수는 migrate 와 free 스캐너가 만났을 때 페이지 isolation을 위해
+ * 건너 뛰어야 하는 페이지블록의 모든 캐쉬된 정보를 지우기 위해 호출된다.
  */
 static void __reset_isolation_suitable(struct zone *zone)
 {
@@ -2087,19 +2086,19 @@ compact_zone(struct compact_control *cc, struct capture_control *capc)
 	cc->migratetype = gfpflags_to_migratetype(cc->gfp_mask);
 	ret = compaction_suitable(cc->zone, cc->order, cc->alloc_flags,
 							cc->classzone_idx);
-	/* Compaction is likely to fail */
+	/* Compaction 이 실패한 것 같다. */
 	if (ret == COMPACT_SUCCESS || ret == COMPACT_SKIPPED)
 		return ret;
 
-	/* huh, compaction_suitable is returning something unexpected */
+	/* compaction_suitable 함수가 예상치 못한 것을 반환함 */
 	VM_BUG_ON(ret != COMPACT_CONTINUE);
 
 	/*
-	 * Clear pageblock skip if there were failures recently and compaction
-	 * is about to be retried after being deferred.
+	 * 최근에 실패하고 compaction이 지연된후 재시도되는 경우
+	 * 페이지블록 skip 비트를 지워라.
 	 */
-	// compaction이 64번 이상 실패한 경우 다시 시작하기 위해
-	// pageblock 의 skip 비트를 모두 clear한다.
+	 /* compaction이 64번 이상 실패한 경우 다시 시작하기 위해 */
+	 /* pageblock 의 skip 비트를 모두 clear한다. */
 	if (compaction_restarting(cc->zone, cc->order))
 		__reset_isolation_suitable(cc->zone);
 
@@ -2108,6 +2107,11 @@ compact_zone(struct compact_control *cc, struct capture_control *capc)
 	 * information on where the scanners should start (unless we explicitly
 	 * want to compact the whole zone), but check that it is initialised
 	 * by ensuring the values are within zone boundaries.
+	 */
+	/*
+	 * zone의 끝으로 모든 movable 페이지를 옮기도록 설정. 스캐너가 시작해야할
+	 * 사용된 캐시 정보(명백하게 전체 zone을 compate하기 원하지 않는다면),
+	 * 그러나 값이 zone경계 안에 있도록 초기화 되었는지 검사하라.
 	 */
 	cc->fast_start_pfn = 0;
 	if (cc->whole_zone) {
@@ -2133,12 +2137,12 @@ compact_zone(struct compact_control *cc, struct capture_control *capc)
 	last_migrated_pfn = 0;
 
 	/*
-	 * Migrate has separate cached PFNs for ASYNC and SYNC* migration on
-	 * the basis that some migrations will fail in ASYNC mode. However,
-	 * if the cached PFNs match and pageblocks are skipped due to having
-	 * no isolation candidates, then the sync state does not matter.
-	 * Until a pageblock with isolation candidates is found, keep the
-	 * cached PFNs in sync to avoid revisiting the same blocks.
+	 * Migrate는 일부 migration 이 비동기 모드에서 실패할 수 있다는 기준으로
+	 * 동기와 비동기 migration을 위한 별도의 캐쉬된 PFN을 가진다.
+	 * 그러나 만약 캐쉬된 PFN이 일치하고 isolation 후보가 없어서 페이지블록을
+	 * 건너뛴다면 동기화 상태는 중요하지 않다.
+	 * isolation 후보가 발견되기 전까지 같은 블록이 재방문 되는 것을
+	 * 피하기 위해 동기화 상태로 캐쉬된 PFN 을 유지하라.
 	 */
 	update_cached = !sync &&
 		cc->zone->compact_cached_migrate_pfn[0] == cc->zone->compact_cached_migrate_pfn[1];
@@ -2153,12 +2157,11 @@ compact_zone(struct compact_control *cc, struct capture_control *capc)
 		unsigned long start_pfn = cc->migrate_pfn;
 
 		/*
-		 * Avoid multiple rescans which can happen if a page cannot be
-		 * isolated (dirty/writeback in async mode) or if the migrated
-		 * pages are being allocated before the pageblock is cleared.
-		 * The first rescan will capture the entire pageblock for
-		 * migration. If it fails, it'll be marked skip and scanning
-		 * will proceed as normal.
+		 * 만약 페이지가 isolated 될 수 없는 페이지
+		 * (비동기 모드의 dirty/writeback)나 페이지블록이 지워지기 전에
+		 * migrated 페이지가 할당될 수 있는 여러 rescan을 피하라.
+		 * 첫번째 migration을 위해 전체 페이지블록을 캡쳐한다. 실패하면
+		 * skip으로 표시되고 스캔이 정상으로 진행된다.
 		 */
 		cc->rescan = false;
 		if (pageblock_start_pfn(last_migrated_pfn) ==
