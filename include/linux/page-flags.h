@@ -739,21 +739,30 @@ PAGEFLAG_FALSE(DoubleMap)
  */
 #define PAGE_TYPE_BASE	0xf0000000
 /* Reserve		0x0000007f to catch underflows of page_mapcount */
-#define PAGE_MAPCOUNT_RESERVE	-128
-#define PG_buddy	0x00000080
-#define PG_offline	0x00000100
-#define PG_kmemcg	0x00000200
-#define PG_table	0x00000400
+#define PAGE_MAPCOUNT_RESERVE	-128 /* 0xffffff80 */
+#define PG_buddy	0x00000080   /* 0xffffff7f, -129 */
+#define PG_offline	0x00000100   /* 0xfffffEff, -257 */
+#define PG_kmemcg	0x00000200   /* 0xfffffdff, -513 */
+#define PG_table	0x00000400   /* 0xfffffbff, -1025 */
 
 /* page가 flag 타입이면 true. */
 #define PageType(page, flag)						\
 	((page->page_type & (PAGE_TYPE_BASE | flag)) == PAGE_TYPE_BASE)
 
+/*
+ * 위치 카운터가 커질수록 점점 큰 양수를 지우게 되므로 숫자는 점점 작아진다
+ * 따라서 PAGE_MAPCOUNT_RESERVE(-128)보다 작은 수(위에서 -129, -257등)의 경우
+ * type을 가지고 있으므로 참을 반환
+ */
 static inline int page_has_type(struct page *page)
 {
 	return (int)page->page_type < PAGE_MAPCOUNT_RESERVE;
 }
 
+/*
+ * PAGE_TYPE_OPS 매크로를 사용하여 PageUname, __SetPageUname, __ClearPageUname
+ * 함수를 만든다.
+ */
 #define PAGE_TYPE_OPS(uname, lname)					\
 static __always_inline int Page##uname(struct page *page)		\
 {									\
@@ -771,29 +780,33 @@ static __always_inline void __ClearPage##uname(struct page *page)	\
 }
 
 /*
- * PageBuddy() indicates that the page is free and in the buddy system
- * (see mm/page_alloc.c).
+ * PageBuddy 함수는 페이지가 비어있고 버디시스템에 있다는 걸 나타낸다.
+ * mm/page_alloc.c 참조
+ * 코드상으로는 PG_buddy 비트가 0인지를 리턴한다
  */
+/* PageBuddy, __SetPageBuddy, __ClearPageBuddy 함수를 만든다. */
 PAGE_TYPE_OPS(Buddy, buddy)
 
 /*
- * PageOffline() indicates that the page is logically offline although the
- * containing section is online. (e.g. inflated in a balloon driver or
- * not onlined when onlining the section).
- * The content of these pages is effectively stale. Such pages should not
- * be touched (read/write/dump/save) except by their owner.
+ * PageOffline함수는 포함하는 섹션이 online이지만 페이지가 논리적으로 오프라인 임을
+ * 나타낸다.(예. balloon driver에서 부풀려 졌거나 섹션을 온라인화할때 온라인 상태가 아님)
+ * 이 페이들의 내용은 사실상 오래되었다. 이러한 페이지들은 소유자 외에는
+ * 접근되지 않아야 한다.(읽기/쓰기/dump/저장)
  */
+/* PageOffline, __SetPageOffline, __ClearPageOffline 함수를 만든다. */
 PAGE_TYPE_OPS(Offline, offline)
 
 /*
- * If kmemcg is enabled, the buddy allocator will set PageKmemcg() on
- * pages allocated with __GFP_ACCOUNT. It gets cleared on page free.
+ * kemcg가 활성화 되었다면 버디 할당자는  __GFP_ACCOUNT와 함께 할당된 페이지들에
+ * PageKmemcg를 설정할 것이다. 페이지 free에서 지워진다.
  */
+/* PageKmemcg, __SetPageKmemcg, __ClearPageKmemcg 함수를 만든다. */
 PAGE_TYPE_OPS(Kmemcg, kmemcg)
 
 /*
- * Marks pages in use as page tables.
+ * 사용중인 페이지를 페이지 테이블로 표시
  */
+/* PageTable, __SetPageTable, __ClearPageTable 함수를 만든다. */
 PAGE_TYPE_OPS(Table, table)
 
 extern bool is_free_buddy_page(struct page *page);
@@ -801,8 +814,8 @@ extern bool is_free_buddy_page(struct page *page);
 __PAGEFLAG(Isolated, isolated, PF_ANY);
 
 /*
- * If network-based swap is enabled, sl*b must keep track of whether pages
- * were allocated from pfmemalloc reserves.
+ * 네트워크기반 스왑이 활성화 되었다면 sl*b는 pfmemalloc 예약에서 페이지가 할당
+ * 되었는지 여부를 추적해야 한다.
  */
 static inline int PageSlabPfmemalloc(struct page *page)
 {
@@ -835,10 +848,10 @@ static inline void ClearPageSlabPfmemalloc(struct page *page)
 #endif
 
 /*
- * Flags checked when a page is freed.  Pages being freed should not have
- * these flags set.  It they are, there is a problem.
+ * 페이지가 해제될 때 확인되는 플래그들. 해제되는 페이지들은 이 플래그들이 설정되어서는
+ * 안된다. 만약 그렇다면 문제가 있다.
  */
-#define PAGE_FLAGS_CHECK_AT_FREE				\
+ #define PAGE_FLAGS_CHECK_AT_FREE				\
 	(1UL << PG_lru		| 1UL << PG_locked	|	\
 	 1UL << PG_private	| 1UL << PG_private_2	|	\
 	 1UL << PG_writeback	| 1UL << PG_reserved	|	\
@@ -846,24 +859,25 @@ static inline void ClearPageSlabPfmemalloc(struct page *page)
 	 1UL << PG_unevictable	| __PG_MLOCKED)
 
 /*
- * Flags checked when a page is prepped for return by the page allocator.
- * Pages being prepped should not have these flags set.  It they are set,
- * there has been a kernel bug or struct page corruption.
+ * 페이지 할당자가 페이지 반환을 준비할 때 확인하는 플래그들
+ * 준비된 페이지들은 이 플래그 설정이 있어서는 안된다. 설정되었다면 커널 버그이거나
+ * 구조체 페이지 손상이다.
  *
- * __PG_HWPOISON is exceptional because it needs to be kept beyond page's
- * alloc-free cycle to prevent from reusing the page.
+ * __PG_HWPOISON 은 페이지 재사용을 막기위해 페이지의 alloc-free 사이클 이상으로
+ * 유지되어야 하므로 예외다.
  */
 #define PAGE_FLAGS_CHECK_AT_PREP	\
 	(((1UL << NR_PAGEFLAGS) - 1) & ~__PG_HWPOISON)
 
 #define PAGE_FLAGS_PRIVATE				\
 	(1UL << PG_private | 1UL << PG_private_2)
-/**
- * page_has_private - Determine if page has private stuff
- * @page: The page to be checked
+
+/*
+ * page_has_private - 페이지가 private인지 확인
+ * @page: 검사 할 페이지
  *
- * Determine if a page has private stuff, indicating that release routines
- * should be invoked upon it.
+ * 페이지가 private 항목이 있는지 확인하여, 해제 루틴이 release 루틴이 수행되어야 함을
+ * 나타냄
  */
 static inline int page_has_private(struct page *page)
 {
