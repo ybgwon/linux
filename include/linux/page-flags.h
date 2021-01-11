@@ -78,9 +78,6 @@
  * *_dontuse flag를 사용하지 말라. 매크로를 사용하라. 그렇지 않으면
  * locked- 와 dirty-page accounting 이 깨진다.
  *
- * The page flags field is split into two parts, the main flags area
- * which extends from the low bits upwards, and the fields area which
- * extends from the high bits downwards.
  * page flags 필드는 두부분으로 나눠지는데, 주 flag 영역은 하위 비트에서 상위로
  * 확장하고,  fields 영역은 상위 비트에서 아래로 확장한다.
  *
@@ -231,12 +228,17 @@ static inline void page_init_poison(struct page *page, size_t size)
 		page; })
 #define PF_ANY(page, enforce)	PF_POISONED_CHECK(page)
 #define PF_HEAD(page, enforce)	PF_POISONED_CHECK(compound_head(page))
+/* compound tail 페이지 이면 빌드 에러. 아니면 페이지 반환하되 하드웨어 문제 있으면 빌드 버그 */
 #define PF_ONLY_HEAD(page, enforce) ({					\
 		VM_BUG_ON_PGFLAGS(PageTail(page), page);		\
 		PF_POISONED_CHECK(page); })
+/* enforce 가 1이고, compound tail 페이지 이면 빌드 에러 아니면 enforce 0일때 수행 */
+/* enforce 가 0 이면 compound head 나 페이지 그대로 반환하되 하드웨어 문제 있으면 빌드 버그 */
 #define PF_NO_TAIL(page, enforce) ({					\
 		VM_BUG_ON_PGFLAGS(enforce && PageTail(page), page);	\
 		PF_POISONED_CHECK(compound_head(page)); })
+/* enforce 가 1이고, compound 페이지 이면 빌드에러 아니면 enforce 0 일때 수행*/
+/* enforce 가 0이면 페이지 그대로 반환하되 하드웨어 문제 있으면 빌드 버그 */
 #define PF_NO_COMPOUND(page, enforce) ({				\
 		VM_BUG_ON_PGFLAGS(enforce && PageCompound(page), page);	\
 		PF_POISONED_CHECK(page); })
@@ -408,8 +410,8 @@ PAGEFLAG(Readahead, reclaim, PF_NO_COMPOUND)
 
 #ifdef CONFIG_HIGHMEM
 /*
- * Must use a macro here due to header dependency issues. page_zone() is not
- * available at this point.
+ * header 종속성 문제 때문에 여기 매크로를 사용해야 한다. page_zone은
+ * 여기에 가용하지 않다.
  */
 #define PageHighMem(__p) is_highmem_idx(page_zonenum(__p))
 #else
