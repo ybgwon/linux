@@ -2201,25 +2201,23 @@ static void change_pageblock_range(struct page *pageblock_page,
 }
 
 /*
- * When we are falling back to another migratetype during allocation, try to
- * steal extra free pages from the same pageblocks to satisfy further
- * allocations, instead of polluting multiple pageblocks.
+ * 할당중에 다른 migratetype으로 대체될 때 다수의 페이지블록을 오염시키는 대신 다음
+ * 할당을 만족시키기 위해 같은 페이지블록으로 부터 여분의 free 페이지를 가져오려
+ * 시도하라.
  *
- * If we are stealing a relatively large buddy page, it is likely there will
- * be more free pages in the pageblock, so try to steal them all. For
- * reclaimable and unmovable allocations, we steal regardless of page size,
- * as fragmentation caused by those allocations polluting movable pageblocks
- * is worse than movable allocations stealing from unmovable and reclaimable
- * pageblocks.
+ * 상대적으로 큰 버디 페이지에서 가져오는 중이라면 페이지블록에 더많은 free 페이지가
+ * 있을것이므로 그 모두를 가져오라. 회수나 unmovable 할당에서 unmovable 과 회수
+ * 페이지블록으로부터 가져오는 movable 할당 보다  movable 페이지블록을 오염시키는
+ * 그러한 할당으로 인해 야기되는 단편화가 더 나쁘므로 페이지 크기에 상관없이 가져오라.
  */
 static bool can_steal_fallback(unsigned int order, int start_mt)
 {
 	/*
-	 * Leaving this order check is intended, although there is
-	 * relaxed order check in next check. The reason is that
-	 * we can actually steal whole pageblock if this condition met,
-	 * but, below check doesn't guarantee it and that is just heuristic
-	 * so could be changed anytime.
+	 * order 검사를 하지않은 것은 의도된 것이지만 다음 검사에서 여유로운 order
+	 * 검사가 있다. 그 이유는 이 조건이 충족하면 실제로 모든 페이지블록을
+	 * 가져올 수 있기 때문이다
+	 * 그러나 아래 검사는 이를 보장하지 못하고 단지 경험적이다
+	 * 그래서 언제든지 바뀔 수 있다.
 	 */
 	if (order >= pageblock_order)
 		return true;

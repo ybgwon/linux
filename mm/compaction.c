@@ -1176,8 +1176,8 @@ freelist_scan_limit(struct compact_control *cc)
 }
 
 /*
- * Test whether the free scanner has reached the same or lower pageblock than
- * the migration scanner, and compaction should thus terminate.
+ * free 스캐너가 migration 스캐너 보다 같거나 작은 페이비블록을 가지는지 테스트해서
+ * compaction 을 종료해야 한다.
  */
 static inline bool compact_scanners_met(struct compact_control *cc)
 {
@@ -1852,16 +1852,15 @@ static enum compact_result __compact_finished(struct compact_control *cc)
 	const int migratetype = cc->migratetype;
 	int ret;
 
-	/* Compaction run completes if the migrate and free scanner meet */
+	/* migrate 와 free 스캐너가 만나면 compaction 실행이 완료된다. */
 	if (compact_scanners_met(cc)) {
-		/* Let the next compaction start anew. */
+		/* 다음 compaction  다시 시작 */
 		reset_cached_positions(cc->zone);
 
 		/*
-		 * Mark that the PG_migrate_skip information should be cleared
-		 * by kswapd when it goes to sleep. kcompactd does not set the
-		 * flag itself as the decision to be clear should be directly
-		 * based on an allocation request.
+		 * PG_migrate_skip 정보는 휴면상태가 될 때 kswapd에 의해 지워
+		 * 져야 한다고 표시. kcompactd는 지움 결정이 직접적으로 할당 요구에
+		 * 기초하여야 하므로 flag를 설정하지 못한다.
 		 */
 		if (cc->direct_compaction)
 			cc->zone->compact_blockskip_flush = true;
@@ -1876,10 +1875,9 @@ static enum compact_result __compact_finished(struct compact_control *cc)
 		return COMPACT_CONTINUE;
 
 	/*
-	 * Always finish scanning a pageblock to reduce the possibility of
-	 * fallbacks in the future. This is particularly important when
-	 * migration source is unmovable/reclaimable but it's not worth
-	 * special casing.
+	 * 향후 대체모드로의 가능성을 줄이리면 항상 페이지블록 스캔을 완료하라.
+	 * 이것은 migration 소스가 unmovable/reclaimable 일때 특히 중요하나
+	 * 특별한 경우는 가치가 없다.
 	 */
 	if (!IS_ALIGNED(cc->migrate_pfn, pageblock_nr_pages))
 		return COMPACT_CONTINUE;
@@ -1890,34 +1888,33 @@ static enum compact_result __compact_finished(struct compact_control *cc)
 		struct free_area *area = &cc->zone->free_area[order];
 		bool can_steal;
 
-		/* Job done if page is free of the right migratetype */
+		/* 페이지가 올바른 migratetype의 free 페이지 이면 끝 */
 		if (!list_empty(&area->free_list[migratetype]))
 			return COMPACT_SUCCESS;
 
 #ifdef CONFIG_CMA
-		/* MIGRATE_MOVABLE can fallback on MIGRATE_CMA */
+		/* MIGRATE_MOVABLE 은 MIGRATE_CMA의 대체모드가 될 수 있다 */
 		if (migratetype == MIGRATE_MOVABLE &&
 			!list_empty(&area->free_list[MIGRATE_CMA]))
 			return COMPACT_SUCCESS;
 #endif
 		/*
-		 * Job done if allocation would steal freepages from
-		 * other migratetype buddy lists.
+		 * 할당이 다른 migratetype 버디 목록에서 freepage를 가져올 수
+		 * 있다면 작업은 완료되었다.
 		 */
 		if (find_suitable_fallback(area, order, migratetype,
 						true, &can_steal) != -1) {
 
-			/* movable pages are OK in any pageblock */
+			/* movable 페이지는 어떤 페이지블록이라도 괜찮다 */
 			if (migratetype == MIGRATE_MOVABLE)
 				return COMPACT_SUCCESS;
 
 			/*
-			 * We are stealing for a non-movable allocation. Make
-			 * sure we finish compacting the current pageblock
-			 * first so it is as free as possible and we won't
-			 * have to steal another one soon. This only applies
-			 * to sync compaction, as async compaction operates
-			 * on pageblocks of the same migratetype.
+			 * non-movable 할당을 위해 가져오는 중이다.  가능한 free
+			 * 하고 바로 다른 페이지블록을 가져오지 않아도 되도록 먼저
+			 * 현재 페이지블록 compaction이 완료 되었는지 확인하라.
+			 * 비동기 compaction은 같은 migratetype의 페이지블록에
+			 * 동작하므로 이것은 동기 compaction에만 적용된다
 			 */
 			if (cc->mode == MIGRATE_ASYNC ||
 					IS_ALIGNED(cc->migrate_pfn,
@@ -2103,14 +2100,8 @@ compact_zone(struct compact_control *cc, struct capture_control *capc)
 		__reset_isolation_suitable(cc->zone);
 
 	/*
-	 * Setup to move all movable pages to the end of the zone. Used cached
-	 * information on where the scanners should start (unless we explicitly
-	 * want to compact the whole zone), but check that it is initialised
-	 * by ensuring the values are within zone boundaries.
-	 */
-	/*
 	 * zone의 끝으로 모든 movable 페이지를 옮기도록 설정. 스캐너가 시작해야할
-	 * 사용된 캐시 정보(명백하게 전체 zone을 compate하기 원하지 않는다면),
+	 * 사용된 캐시 정보(명백하게 전체 zone을 compact하기 원하지 않는다면),
 	 * 그러나 값이 zone경계 안에 있도록 초기화 되었는지 검사하라.
 	 */
 	cc->fast_start_pfn = 0;

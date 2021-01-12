@@ -520,10 +520,9 @@ static __always_inline int __PageMovable(struct page *page)
 
 #ifdef CONFIG_KSM
 /*
- * A KSM page is one of those write-protected "shared pages" or "merged pages"
- * which KSM maps into multiple mms, wherever identical anonymous page content
- * is found in VM_MERGEABLE vmas.  It's a PageAnon page, pointing not to any
- * anon_vma, but to that page's node of the stable tree.
+ * KSM 페이지는 KSM이 동일한 익명 페이지 항목이 VM_MERGEABLE vma에 발견될 때 마다
+ * 다수의 mms에 매핑하는 쓰기 보호된 공유 페이지들이나 병합페이지들의 하나이다.
+ * anon_vma 가 아니라 안정 tree의 해당 페이지 노드를 가리키는 PageAnon 페이지이다.
  */
 static __always_inline int PageKsm(struct page *page)
 {
@@ -878,7 +877,7 @@ static inline void ClearPageSlabPfmemalloc(struct page *page)
  * page_has_private - 페이지가 private인지 확인
  * @page: 검사 할 페이지
  *
- * 페이지가 private 항목이 있는지 확인하여, 해제 루틴이 release 루틴이 수행되어야 함을
+ * 페이지가 private 항목이 있는지 확인하여, 해제 루틴이 수행되어야 함을
  * 나타냄
  */
 static inline int page_has_private(struct page *page)

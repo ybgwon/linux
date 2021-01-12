@@ -3,9 +3,10 @@
 #define _LINUX_COMPACTION_H
 
 /*
- * Determines how hard direct compaction should try to succeed.
- * Lower value means higher priority, analogically to reclaim priority.
+ * 직접 compationd 성공을 위해 시도해야하는 강도를 결정
+ * reclaim 우선순위에 유추해서, 더낮은 값은 더높은 우선순위을 의미한다.
  */
+
 enum compact_priority {
 	COMPACT_PRIO_SYNC_FULL,
 	MIN_COMPACT_PRIORITY = COMPACT_PRIO_SYNC_FULL,
@@ -16,45 +17,44 @@ enum compact_priority {
 	INIT_COMPACT_PRIORITY = COMPACT_PRIO_ASYNC
 };
 
-/* Return values for compact_zone() and try_to_compact_pages() */
-/* When adding new states, please adjust include/trace/events/compaction.h */
+/* compact_zone과 try_to_compact_zone 함수를 위한 반환값 */
+/* 새 상태를 더할때 include/trace/events/compaction.h 를 조정하라 */
 enum compact_result {
-	/* For more detailed tracepoint output - internal to compaction */
+	/* 더 자세한 tracepoint 출력을 위함 - compaction 내부 */
 	COMPACT_NOT_SUITABLE_ZONE,
-	/*
-	 * compaction didn't start as it was not possible or direct reclaim
-	 * was more suitable
-	 */
+
+	/* 가능하지 않거나 직접 회수가 더 적합하여 compaction이 시작하지 않음  */
 	COMPACT_SKIPPED,
-	/* compaction didn't start as it was deferred due to past failures */
+	/* 이전 실패로 인해 지연되어 compaction을 시작하지 않음 */
 	COMPACT_DEFERRED,
 
-	/* compaction not active last round */
+	/* 마지막 라운드에 compaction이 활성화 되지 않음 */
 	COMPACT_INACTIVE = COMPACT_DEFERRED,
 
-	/* For more detailed tracepoint output - internal to compaction */
+
+	/* 더 자세한 tracepoint 출력을 위함 - compaction 내부 */
 	COMPACT_NO_SUITABLE_PAGE,
-	/* compaction should continue to another pageblock */
+	/* 다른 페이지블록에 comapction을 계속하여야 함 */
 	COMPACT_CONTINUE,
 
+
 	/*
-	 * The full zone was compacted scanned but wasn't successfull to compact
-	 * suitable pages.
+	 * compaction 된 모든 zone치 스캔되었지만 적당한 페이지를 compaction
+	 * 하지 못함
 	 */
 	COMPACT_COMPLETE,
+
 	/*
-	 * direct compaction has scanned part of the zone but wasn't successfull
-	 * to compact suitable pages.
+	 * 직접 compaction 이 zone의 일부를 스캔했지만 compaction할 적당한 페이지
+	 * 를 compaction 하지 못함
 	 */
 	COMPACT_PARTIAL_SKIPPED,
 
-	/* compaction terminated prematurely due to lock contentions */
+	/* compaction이 lock 경합으로 조기 종료됨 */
 	COMPACT_CONTENDED,
 
-	/*
-	 * direct compaction terminated after concluding that the allocation
-	 * should now succeed
-	 */
+
+	/* 할당이 이제 성공해야 한다고 결론을 내린후 직접 compaction이 종료되었다 */
 	COMPACT_SUCCESS,
 };
 
