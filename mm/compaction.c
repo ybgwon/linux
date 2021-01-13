@@ -133,13 +133,13 @@ void __ClearPageMovable(struct page *page)
 }
 EXPORT_SYMBOL(__ClearPageMovable);
 
-/* Do not skip compaction more than 64 times */
+/* 64회 이상 compaction을 건너뛰지 마라 */
 #define COMPACT_MAX_DEFER_SHIFT 6
 
 /*
- * Compaction is deferred when compaction fails to result in a page
- * allocation success. 1 << compact_defer_limit compactions are skipped up
- * to a limit of 1 << COMPACT_MAX_DEFER_SHIFT
+ * 페이지 할당 성공으로 발생하는 compaction 실패시 compaction이 유예된다.
+ * 2의 compact_defer_limit승 compaction이 2의 COMPACT_MAX_DEFER_SHIFT승
+ * 제한까지 건너뛴다.
  */
 void defer_compaction(struct zone *zone, int order)
 {
@@ -155,11 +155,15 @@ void defer_compaction(struct zone *zone, int order)
 	trace_mm_compaction_defer_compaction(zone, order);
 }
 
-/* Returns true if compaction should be skipped this time */
+/* compaction이 이번에 건너뛰어야 하면 true 반환 */
 bool compaction_deferred(struct zone *zone, int order)
 {
 	unsigned long defer_limit = 1UL << zone->compact_defer_shift;
 
+	/*
+	 * 요청 order가 이전 실패한 order 보다 작으면 compaction을 시도해
+	 * 보기 위해 false 반환
+	 */
 	if (order < zone->compact_order_failed)
 		return false;
 
@@ -167,6 +171,7 @@ bool compaction_deferred(struct zone *zone, int order)
 	if (++zone->compact_considered > defer_limit)
 		zone->compact_considered = defer_limit;
 
+	/* defer_limit 에 도달한 경우도 false 반환 */
 	if (zone->compact_considered >= defer_limit)
 		return false;
 
@@ -2219,11 +2224,9 @@ compact_zone(struct compact_control *cc, struct capture_control *capc)
 
 check_drain:
 		/*
-		 * Has the migration scanner moved away from the previous
-		 * cc->order aligned block where we migrated from? If yes,
-		 * flush the pages that were freed, so that they can merge and
-		 * compact_finished() can detect immediately if allocation
-		 * would succeed.
+		 * migration 스캐너가 migrate한 이전 cc->order 정렬 블록으로부터
+		 * 멀어 졌나? 그렇다면 병합하고 compact_finished 함수가 즉시 할당에
+		 * 성공했음을수 감지 할 수 있게 free된 페이지를 비워라.
 		 */
 		if (cc->order > 0 && last_migrated_pfn) {
 			int cpu;
@@ -2240,7 +2243,7 @@ check_drain:
 			}
 		}
 
-		/* Stop if a page has been captured */
+		/* 페이지를 획득했다면 중지하라 */
 		if (capc && capc->page) {
 			ret = COMPACT_SUCCESS;
 			break;
@@ -2324,14 +2327,14 @@ static enum compact_result compact_zone_order(struct zone *zone, int order,
 int sysctl_extfrag_threshold = 500;
 
 /**
- * try_to_compact_pages - Direct compact to satisfy a high-order allocation
+ * try_to_compact_pages - 상위 order 할당을 만족하기위한 직접 compact
  * @gfp_mask: The GFP mask of the current allocation
  * @order: The order of the current allocation
  * @alloc_flags: The allocation flags of the current allocation
  * @ac: The context of current allocation
- * @prio: Determines how hard direct compaction should try to succeed
+ * @prio: 직접 compaction이 성공하기 위해 시도해야하는 강도를 설정
  *
- * This is the main entry point for direct page compaction.
+ * 직접 페이지 compaction을 위한 주 진입점이다.
  */
 enum compact_result try_to_compact_pages(gfp_t gfp_mask, unsigned int order,
 		unsigned int alloc_flags, const struct alloc_context *ac,
@@ -2351,7 +2354,7 @@ enum compact_result try_to_compact_pages(gfp_t gfp_mask, unsigned int order,
 
 	trace_mm_compaction_try_to_compact_pages(order, gfp_mask, prio);
 
-	/* Compact each zone in the list */
+	/* 목록의 각 zone compact */
 	for_each_zone_zonelist_nodemask(zone, z, ac->zonelist, ac->high_zoneidx,
 								ac->nodemask) {
 		enum compact_result status;

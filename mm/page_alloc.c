@@ -1463,8 +1463,12 @@ void __init memblock_free_pages(struct page *page, unsigned long pfn,
  * with the migration of free compaction scanner. The scanners then need to
  * use only pfn_valid_within() check for arches that allow holes within
  * pageblocks.
+ * free compaction 스캐너의 migration 으로 스캐닝 하기 전에 주어진
+ * [start_pfn, end_pfn] 간격의 전체 (또는 일부)페이지블록이 유효하고 동일 zone
+ * 인지 확인하라. 스캐너는 그러면 페이지블록 사이 hole을 허락하는 아키텍쳐에 대해
+ * pfn_valide_within 검사만 사용해야 한다.
  *
- * Return struct page pointer of start_pfn, or NULL if checks were not passed.
+ * start_pfn의 페이지 구조체 포인터를 반환하거나 검사가 통과되지 않은 경우 NULL을 반환
  *
  * It's possible on some configurations to have a setup like node0 node1 node0
  * i.e. it's possible that all pages within a zones range of pages do not
@@ -1473,6 +1477,11 @@ void __init memblock_free_pages(struct page *page, unsigned long pfn,
  * interleaving within a single pageblock. It is therefore sufficient to check
  * the first and last page of a pageblock and avoid checking each individual
  * page in a pageblock.
+ * node0 node1 node0 같은 설정을 가지는 일부 설정이 가능하다. 즉 페이지의 zone 범위
+ * 사이의 모든 페이지가 하나의 zone 에 속하지 않을 수 있다. 하나의 페이지블록 사이에
+ * node0 node1 node0 끼워넣기가 아니라 node0 와 node1 사이의 경계가 하나의 페이지블록
+ * 사이에 있다고 가정한다. 그래서 페이지블록의 처음과 끝 페이지만 확인하면 충분하므로
+ * 페이지블록에 각각의 페이지 검사를 피한다.
  */
 struct page *__pageblock_pfn_to_page(unsigned long start_pfn,
 				     unsigned long end_pfn, struct zone *zone)
@@ -3761,13 +3770,13 @@ out:
 }
 
 /*
- * Maximum number of compaction retries wit a progress before OOM
- * killer is consider as the only way to move forward.
+ * OOM killer가 앞으로 나아갈 유일한 방법으로 간주되기 전에 진행상황과 함께
+ * 최대 compaction 재시도 횟수이다.
  */
 #define MAX_COMPACT_RETRIES 16
 
 #ifdef CONFIG_COMPACTION
-/* Try memory compaction for high-order allocations before reclaim */
+/* 회수 전에 상위 order 할당을 위한 메모리 compaction을 시도하라 */
 static struct page *
 __alloc_pages_direct_compact(gfp_t gfp_mask, unsigned int order,
 		unsigned int alloc_flags, const struct alloc_context *ac,
