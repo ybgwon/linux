@@ -209,7 +209,7 @@ bool compaction_restarting(struct zone *zone, int order)
 }
 
 /* isolate를 위해 페이지가 스캔되어야 한다면 true를 반환한다 */
-// ignore_skip_hint 가 true 이거나 usemap 에 skip bit가 0 이면 true 반환
+/* ignore_skip_hint 가 true 이거나 usemap 에 skip bit가 0 이면 true 반환 */
 static inline bool isolation_suitable(struct compact_control *cc,
 					struct page *page)
 {
@@ -228,10 +228,11 @@ static void reset_cached_positions(struct zone *zone)
 }
 
 /*
- * Compound pages of >= pageblock_order should consistenly be skipped until
- * released. It is always pointless to compact pages of such order (if they are
- * migratable), and the pageblocks they occupy cannot contain any free pages.
+ * pageblock_order(9) 보다 크거나 같은 Compound 페이지는 해제될 때까지 계속하여
+ * 건너뛰어야 한다. 그런 order(비록 migrate 가능하더라도)의 페이지 compaction은
+ * 항상 무의미하고 그것들이 차지한 페이지는 free 페이지가 포함될 수 없다.
  */
+/* order 9 이상의 compound 페이지일 경우 true 반환 */
 static bool pageblock_skip_persistent(struct page *page)
 {
 	if (!PageCompound(page))
@@ -410,8 +411,8 @@ static bool test_and_set_skip(struct compact_control *cc, struct page *page,
 	return skip;
 }
 
-// pfn 매개변수가 속하는 블록의 다음 블록의 시작 PFN을 compact_cached_migrate_pfn
-// 값으로 설정
+/* pfn 매개변수가 속하는 블록의 다음 블록의 시작 PFN을 compact_cached_migrate_pfn */
+/* 값으로 설정 */
 static void update_cached_migrate(struct compact_control *cc, unsigned long pfn)
 {
 	struct zone *zone = cc->zone;
@@ -1129,6 +1130,9 @@ isolate_migratepages_range(struct compact_control *cc, unsigned long start_pfn,
 #endif /* CONFIG_COMPACTION || CONFIG_CMA */
 #ifdef CONFIG_COMPACTION
 
+/* 요청 migrate type과 현재 페이지의 migrate type이 같은 경우 true 반환 */
+/* 동기 모드이거나 direct_compaction이 아닌 경우도 true 반환 */
+/* order 9 이상의 compound page는 무조건 false */
 static bool suitable_migration_source(struct compact_control *cc,
 							struct page *page)
 {

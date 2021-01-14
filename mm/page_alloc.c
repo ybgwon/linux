@@ -396,7 +396,8 @@ static inline bool defer_init(int nid, unsigned long pfn, unsigned long end_pfn)
 }
 #endif
 
-/* Return a pointer to the bitmap storing bits affecting a block of pages */
+/* 페이지 블록에 영향을 주는 비트를 저장하는 비트맵 포인터 반환 */
+/* pfn에 해당하는 섹션 구조체의 pagblock_flags 멤버변수 반환 */
 static inline unsigned long *get_pageblock_bitmap(struct page *page,
 							unsigned long pfn)
 {
@@ -407,6 +408,8 @@ static inline unsigned long *get_pageblock_bitmap(struct page *page,
 #endif /* CONFIG_SPARSEMEM */
 }
 
+/* SPARMEM 설정의 경우 섹션(1G)내에서의 pfn오프셋에 해당하는 usemap index 반환 */
+/* NR_PAGEBLOCK_BITS가 4이므로 2M당 4bits로 표시되며 반환값은 4의 배수이다 */
 static inline int pfn_to_bitidx(struct page *page, unsigned long pfn)
 {
 #ifdef CONFIG_SPARSEMEM
@@ -438,10 +441,17 @@ static __always_inline unsigned long __get_pfnblock_flags_mask(struct page *page
 
 	bitmap = get_pageblock_bitmap(page, pfn);
 	bitidx = pfn_to_bitidx(page, pfn);
+	/* bitmap이 long 값이므로 64나누어 배열의 인덱스를 얻음 */
 	word_bitidx = bitidx / BITS_PER_LONG;
+	/* bitmap의 오프셋을 구함. 64비트 내어서 4비트(2M)간격의 오프셋이다. */
 	bitidx &= (BITS_PER_LONG-1);
 
+	/* pfn에 해당하는 비트맵을 읽어옴 */
 	word = bitmap[word_bitidx];
+	/*
+	 * 4bit 내에서 읽어올 오프셋이다. 3bit:migrate type, 1bit: skip
+	 * 0부터 시작하므로 migrate type 을 읽어오려면 end_bitidx=2, mask=7
+	 */
 	bitidx += end_bitidx;
 	return (word >> (BITS_PER_LONG - bitidx - 1)) & mask;
 }
@@ -1458,30 +1468,18 @@ void __init memblock_free_pages(struct page *page, unsigned long pfn,
 }
 
 /*
- * Check that the whole (or subset of) a pageblock given by the interval of
- * [start_pfn, end_pfn) is valid and within the same zone, before scanning it
- * with the migration of free compaction scanner. The scanners then need to
- * use only pfn_valid_within() check for arches that allow holes within
- * pageblocks.
  * free compaction 스캐너의 migration 으로 스캐닝 하기 전에 주어진
  * [start_pfn, end_pfn] 간격의 전체 (또는 일부)페이지블록이 유효하고 동일 zone
  * 인지 확인하라. 스캐너는 그러면 페이지블록 사이 hole을 허락하는 아키텍쳐에 대해
- * pfn_valide_within 검사만 사용해야 한다.
+ * pfn_valid_within 검사만 사용해야 한다.
  *
  * start_pfn의 페이지 구조체 포인터를 반환하거나 검사가 통과되지 않은 경우 NULL을 반환
  *
- * It's possible on some configurations to have a setup like node0 node1 node0
- * i.e. it's possible that all pages within a zones range of pages do not
- * belong to a single zone. We assume that a border between node0 and node1
- * can occur within a single pageblock, but not a node0 node1 node0
- * interleaving within a single pageblock. It is therefore sufficient to check
- * the first and last page of a pageblock and avoid checking each individual
- * page in a pageblock.
  * node0 node1 node0 같은 설정을 가지는 일부 설정이 가능하다. 즉 페이지의 zone 범위
- * 사이의 모든 페이지가 하나의 zone 에 속하지 않을 수 있다. 하나의 페이지블록 사이에
- * node0 node1 node0 끼워넣기가 아니라 node0 와 node1 사이의 경계가 하나의 페이지블록
- * 사이에 있다고 가정한다. 그래서 페이지블록의 처음과 끝 페이지만 확인하면 충분하므로
- * 페이지블록에 각각의 페이지 검사를 피한다.
+ * 사이의 모든 페이지가 하나의 zone 에 속하지 않을 수 있다. node0 와 node1 사이의 경계는
+ * 하나의 페이지블록 사이에 발생할 수 있지만 단일 페이지블록내에서 interleaving 하는
+ * node0 node1 node0는 아니라고 가정한다. 그래서 페이지블록의 처음과 끝 페이지만
+ * 확인하면 충분하므로 페이지블록에 각각의 페이지 검사를 피한다.
  */
 struct page *__pageblock_pfn_to_page(unsigned long start_pfn,
 				     unsigned long end_pfn, struct zone *zone)
@@ -1489,7 +1487,7 @@ struct page *__pageblock_pfn_to_page(unsigned long start_pfn,
 	struct page *start_page;
 	struct page *end_page;
 
-	/* end_pfn is one past the range we are checking */
+	/* end_pfn은 하나 지난 검사 영역이다 */
 	end_pfn--;
 
 	if (!pfn_valid(start_pfn) || !pfn_valid(end_pfn))
@@ -1504,7 +1502,7 @@ struct page *__pageblock_pfn_to_page(unsigned long start_pfn,
 
 	end_page = pfn_to_page(end_pfn);
 
-	/* This gives a shorter code than deriving page_zone(end_page) */
+	/* page_zone(end_page) 파생함수 보다 짧은 코드 제공 */
 	if (page_zone_id(start_page) != page_zone_id(end_page))
 		return NULL;
 

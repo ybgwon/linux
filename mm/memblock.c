@@ -1677,6 +1677,7 @@ bool __init_memblock memblock_is_memory(phys_addr_t addr)
 	return memblock_search(&memblock.memory, addr) != -1;
 }
 
+/* memblock.memory 에서 검색되고 MEMBLOCK_NOMAP 플래그가 설정되지 않아야 true 반환 */
 bool __init_memblock memblock_is_map_memory(phys_addr_t addr)
 {
 	int i = memblock_search(&memblock.memory, addr);

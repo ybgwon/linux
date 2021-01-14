@@ -245,11 +245,12 @@ static void __init zone_sizes_init(unsigned long min, unsigned long max)
 int pfn_valid(unsigned long pfn)
 {
 	phys_addr_t addr = pfn << PAGE_SHIFT;
-
+	/* addr overflow 검사 */
 	if ((addr >> PAGE_SHIFT) != pfn)
 		return 0;
 
-#ifdef CONFIG_SPARSEMEM
+#ifdef CONFIG_SPARSEMEM				\
+	/* SPRSEMEM 커널 설정이면 섹션 유효성 검사*/
 	if (pfn_to_section_nr(pfn) >= NR_MEM_SECTIONS)
 		return 0;
 

@@ -86,9 +86,10 @@ static inline bool is_migrate_movable(int mt)
 
 extern int page_group_by_mobility_disabled;
 
-#define NR_MIGRATETYPE_BITS (PB_migrate_end - PB_migrate + 1)
-#define MIGRATETYPE_MASK ((1UL << NR_MIGRATETYPE_BITS) - 1)
+#define NR_MIGRATETYPE_BITS (PB_migrate_end - PB_migrate + 1) /* 3 */
+#define MIGRATETYPE_MASK ((1UL << NR_MIGRATETYPE_BITS) - 1)   /* 7(b111) */
 
+/* get_pfnblock_flags_mask(page, page_to_pfn(page), 2, 7) */
 #define get_pageblock_migratetype(page)					\
 	get_pfnblock_flags_mask(page, page_to_pfn(page),		\
 			PB_migrate_end, MIGRATETYPE_MASK)
@@ -1263,6 +1264,7 @@ static inline int present_section_nr(unsigned long nr)
 	return present_section(__nr_to_section(nr));
 }
 
+/* section이 NULL 포인터가 아니고 SECTION_HAS_MEM_MAP 비트가 설정되었으면 1 반환 */
 static inline int valid_section(struct mem_section *section)
 {
 	return (section && (section->section_mem_map & SECTION_HAS_MEM_MAP));

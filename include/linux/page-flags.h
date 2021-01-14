@@ -164,7 +164,7 @@ struct page;	/* forward declaration */
  * page의 compound_head 멤버변수의 0번비트가 1이면 compound 페이지의
  * tail 페이지이다. tail 페이지일 경우는 compound_head 에서 1을
  * 빼서 compound 페이지의 head 페이지 주소를 반환하고
- * 그렇지 않으면 넘어온 매개변수 페이지를 그래도 반환한다.
+ * 그렇지 않으면 넘어온 매개변수 페이지를 그대로 반환한다.
  */
 static inline struct page *compound_head(struct page *page)
 {
