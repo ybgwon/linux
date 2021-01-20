@@ -1656,7 +1656,7 @@ static unsigned long fast_find_migrateblock(struct compact_control *cc)
 	/*
 	 * 작은 주문의 경우 마이그레이션 할 페이지 수가 상대적으로 적어야하며
 	 * 작은 할당을 위해 큰 블록을 확보하는 것이 반드시 정당화되지는 않으므로
-	 * 선형 스캔 만하십시오.
+	 * 선형 스캔만 하라.
 	 */
 	if (cc->order <= PAGE_ALLOC_COSTLY_ORDER)
 		return pfn;

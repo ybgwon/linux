@@ -16,9 +16,8 @@
 #endif
 
 /*
- * These are non-NULL pointers that will result in page faults
- * under normal circumstances, used to verify that nobody uses
- * non-initialized list entries.
+ * 초기화 되지 않는 list 항목을 사용하는 사람이 없음을 확인하는 데 사용하는
+ * 정상적인 상황에서 페이지 faults을 발생시키는 NULL이 아닌 포인터이다.(?)
  */
 #define LIST_POISON1  ((void *) 0x100 + POISON_POINTER_DELTA)
 #define LIST_POISON2  ((void *) 0x200 + POISON_POINTER_DELTA)

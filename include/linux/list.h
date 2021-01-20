@@ -9,15 +9,12 @@
 #include <linux/kernel.h>
 
 /*
- * Simple doubly linked list implementation.
+ * 간단 이중 링크드 리스트 구현
  *
- * Some of the internal functions ("__xxx") are useful when
- * manipulating whole lists rather than single entries, as
- * sometimes we already know the next/prev entries and we can
- * generate better code by using them directly rather than
- * using the generic single-entry routines.
+ * 일부 내부 함수("___xxx")는 단일 항목보다 전체 리스트를 조작할 때 유용하다.
+ * next/prev 항목을 이미 알고 있들때 일반 단일 항목 루틴을 사용하는 것보다
+ * 그것들(내부함수)을 직접 사용하여 더 나은 코드를 생성 할 수 있기 때문이다.
  */
-
 #define LIST_HEAD_INIT(name) { &(name), &(name) }
 
 #define LIST_HEAD(name) \
@@ -48,10 +45,9 @@ static inline bool __list_del_entry_valid(struct list_head *entry)
 #endif
 
 /*
- * Insert a new entry between two known consecutive entries.
+ * 두 알려진 연속 항목 사이에 새로운 항목을 삽입하라.
  *
- * This is only for internal list manipulation where we know
- * the prev/next entries already!
+ * prev/next 항목을 이미 알고 있는 내부 리스트 조작만을 위한 것이다 .
  */
 static inline void __list_add(struct list_head *new,
 			      struct list_head *prev,
@@ -74,6 +70,7 @@ static inline void __list_add(struct list_head *new,
  * Insert a new entry after the specified head.
  * This is good for implementing stacks.
  */
+/* head의 처음(head와 head->next 사이)에 new 삽입. head - new - head->next 순 */
 static inline void list_add(struct list_head *new, struct list_head *head)
 {
 	__list_add(new, head, head->next);
@@ -88,6 +85,7 @@ static inline void list_add(struct list_head *new, struct list_head *head)
  * Insert a new entry before the specified head.
  * This is useful for implementing queues.
  */
+/* head의 끝(head->prev와 head 사이)에 new 삽입. head->prev - new - head 순 */
 static inline void list_add_tail(struct list_head *new, struct list_head *head)
 {
 	__list_add(new, head->prev, head);
@@ -99,6 +97,11 @@ static inline void list_add_tail(struct list_head *new, struct list_head *head)
  *
  * This is only for internal list manipulation where we know
  * the prev/next entries already!
+ */
+/*
+ * prev/next가 각각을 가리키게 함으로써 리스트 항목을 삭제한다.
+ *
+ * prev/next 항목을 이미 알때 사용하는 내부 리스트 조작을 위한 것이다.
  */
 static inline void __list_del(struct list_head * prev, struct list_head * next)
 {
@@ -184,14 +187,15 @@ static inline void list_move_tail(struct list_head *list,
 }
 
 /**
- * list_bulk_move_tail - move a subsection of a list to its tail
+ * list_bulk_move_tail - 리스트의 일부를 꼬리로 옮김
  * @head: the head that will follow our entry
  * @first: first entry to move
  * @last: last entry to move, can be the same as first
  *
- * Move all entries between @first and including @last before @head.
- * All three entries must belong to the same linked list.
+ * @first와 @last포함하는 사이의 항목을 @head 이전으로 옮겨라.
+ * 세 항목 모두 같은 linked 리스트에 속해야 한다.
  */
+/* head->prev - first - ... - last - head 순이 된다 */
 static inline void list_bulk_move_tail(struct list_head *head,
 				       struct list_head *first,
 				       struct list_head *last)
@@ -237,18 +241,16 @@ static inline int list_empty(const struct list_head *head)
 	return READ_ONCE(head->next) == head;
 }
 
-/**
- * list_empty_careful - tests whether a list is empty and not being modified
- * @head: the list to test
+/*
+ * list_empty_careful - 리스트가 비어있고 변경되지 않는지 테스트
+ * @head: 테스트할 목록
  *
- * Description:
- * tests whether a list is empty _and_ checks that no other CPU might be
- * in the process of modifying either member (next or prev)
+ * 설명:
+ * 리스트가 비어있고 멤버(next 나 prev)를 변경하는 프로세스가 없는지를 확인
  *
- * NOTE: using list_empty_careful() without synchronization
- * can only be safe if the only activity that can happen
- * to the list entry is list_del_init(). Eg. it cannot be used
- * if another CPU could re-list_add() it.
+ * 참고: 동기화 없는 list_empty_careful()의 사용은 리스트 항목에 일어날 수 있는
+ * 것이 list_del_init()만 있을 때 안전하다. 예. 다른 CPU가 다시 list_add()를
+ * 사용할 수 있다면 사용할 수 없다.
  */
 static inline int list_empty_careful(const struct list_head *head)
 {
@@ -279,6 +281,8 @@ static inline int list_is_singular(const struct list_head *head)
 	return !list_empty(head) && (head->next == head->prev);
 }
 
+/* head->next에서 entry 까지 잘라 리트스에 복사. list = head->next - ... - entry */
+/* 기존 head는 entry 까지 삭게되고 entry 다음 부터 계속됨. head - entry->next - ... */
 static inline void __list_cut_position(struct list_head *list,
 		struct list_head *head, struct list_head *entry)
 {
@@ -291,18 +295,15 @@ static inline void __list_cut_position(struct list_head *list,
 	new_first->prev = head;
 }
 
-/**
- * list_cut_position - cut a list into two
- * @list: a new list to add all removed entries
- * @head: a list with entries
- * @entry: an entry within head, could be the head itself
- *	and if so we won't cut the list
+/*
+ * list_cut_position - list를 둘로 잘라낸다
+ * @list: 모든 옮겨질 항목을 더할 새 리스트
+ * @head: 항목이 있는 리스트
+ * @entry: head에 속한 항목. 리스트를 자르기 원치 않느다면 head 자신이 될 수 있다.
  *
- * This helper moves the initial part of @head, up to and
- * including @entry, from @head to @list. You should
- * pass on @entry an element you know is on @head. @list
- * should be an empty list or a list you do not care about
- * losing its data.
+ * 이 도우미 함수는 @head의 처음부터 @entry(포함)까지 @head에서 @list로 옯긴다.
+ * @head 에 있는 요소을 @entry에 전달 해야한다. @list는 빈 리스트 이거나
+ * data를 손실에 신경쓰지 않는 리스트여야 한다.
  *
  */
 static inline void list_cut_position(struct list_head *list,
@@ -333,6 +334,8 @@ static inline void list_cut_position(struct list_head *list,
  * If @entry == @head, all entries on @head are moved to
  * @list.
  */
+/* list_cut_position 과 같으나 entry 전까지 잘라낸다 */
+/* list = head->next - ... - entry->prev */
 static inline void list_cut_before(struct list_head *list,
 				   struct list_head *head,
 				   struct list_head *entry)
@@ -368,6 +371,8 @@ static inline void __list_splice(const struct list_head *list,
  * @list: the new list to add.
  * @head: the place to add it in the first list.
  */
+/* head의 처음(head와 head->next 사이)에 list를 붙인다. */
+/* head - list->next - ... - list->prev(last) - head->next - ... */
 static inline void list_splice(const struct list_head *list,
 				struct list_head *head)
 {
@@ -380,6 +385,8 @@ static inline void list_splice(const struct list_head *list,
  * @list: the new list to add.
  * @head: the place to add it in the first list.
  */
+/* head의 끝(head->prev와 head 사이)에 list를 붙인다. */
+/* head->prev - list->next - ... - list->prev(last) - head - ... */
 static inline void list_splice_tail(struct list_head *list,
 				struct list_head *head)
 {
@@ -394,6 +401,14 @@ static inline void list_splice_tail(struct list_head *list,
  *
  * The list at @list is reinitialised
  */
+/*
+ * list_splice_init - 두 리스트를 연결하고 비어있는 목록을 다시 초기화 한다
+ * @list: 추가할 새 리스트
+ * @head: 첫번째 리스트를 더 할 곳
+ *
+ * @list는 다시 초기화 된다
+ */
+/* @list를 @head의 처음에 연결후 @list는 기존 연결이 깨어지므로 다시 초기화 한다 */
 static inline void list_splice_init(struct list_head *list,
 				    struct list_head *head)
 {
@@ -411,6 +426,7 @@ static inline void list_splice_init(struct list_head *list,
  * Each of the lists is a queue.
  * The list at @list is reinitialised
  */
+/* @list를 @head의 끝에 연결후 @list는 기존 연결이 깨어지므로 다시 초기화 한다 */
 static inline void list_splice_tail_init(struct list_head *list,
 					 struct list_head *head)
 {
@@ -425,6 +441,10 @@ static inline void list_splice_tail_init(struct list_head *list,
  * @ptr:	the &struct list_head pointer.
  * @type:	the type of the struct this is embedded in.
  * @member:	the name of the list_head within the struct.
+ */
+/*
+ * @ptr이 속한 구조체의 포인터. 매크로명에 entry가 있으면 container_of 를 사용하여
+ * @ptr에서 member 오프셋만큼 빼기하여 @ptr이 속한 구조체의 포인터를 알아온다.
  */
 #define list_entry(ptr, type, member) \
 	container_of(ptr, type, member)
@@ -486,6 +506,7 @@ static inline void list_splice_tail_init(struct list_head *list,
  * @pos:	the &struct list_head to use as a loop cursor.
  * @head:	the head for your list.
  */
+/* 처음(head->next)에서 끝(head->prev) 까지 반복 */
 #define list_for_each(pos, head) \
 	for (pos = (head)->next; pos != (head); pos = pos->next)
 
@@ -494,6 +515,7 @@ static inline void list_splice_tail_init(struct list_head *list,
  * @pos:	the &struct list_head to use as a loop cursor.
  * @head:	the head for your list.
  */
+/* 끝(head->prev)에서 처음(head->next)까지 역순으로 반복 */
 #define list_for_each_prev(pos, head) \
 	for (pos = (head)->prev; pos != (head); pos = pos->prev)
 
@@ -502,6 +524,10 @@ static inline void list_splice_tail_init(struct list_head *list,
  * @pos:	the &struct list_head to use as a loop cursor.
  * @n:		another &struct list_head to use as temporary storage
  * @head:	the head for your list.
+ */
+/*
+ * FIXME - list_for_each와 다른 점은 pos->next 값을 미리 구해서 저장해 놓는 것인데
+ * 삭제에 안전하다는 정확한 의미를 모르겠다
  */
 #define list_for_each_safe(pos, n, head) \
 	for (pos = (head)->next, n = pos->next; pos != (head); \
