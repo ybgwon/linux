@@ -1205,19 +1205,6 @@ extern int __section_nr(struct mem_section* ms);
 extern unsigned long usemap_size(void);
 
 /*
- * We use the lower bits of the mem_map pointer to store
- * a little bit of information.  The pointer is calculated
- * as mem_map - section_nr_to_pfn(pnum).  The result is
- * aligned to the minimum alignment of the two values:
- *   1. All mem_map arrays are page-aligned.
- *   2. section_nr_to_pfn() always clears PFN_SECTION_SHIFT
- *      lowest bits.  PFN_SECTION_SHIFT is arch-specific
- *      (equal SECTION_SIZE_BITS - PAGE_SHIFT), and the
- *      worst combination is powerpc with 256k pages,
- *      which results in PFN_SECTION_SHIFT equal 6.
- * To sum it up, at least 6 bits are available.
- */
-/*
  * 우리는 약간의 정보를 저장하기 위해 mem_map 포인터의 하위 비트를 사용한다.
  * 포인터는 mem_map - section_nr_to_pfn(pnum) 로 계산된다.
  * 결과는 두 값의 최소 정렬로 정렬된다.

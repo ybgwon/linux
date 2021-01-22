@@ -1733,8 +1733,8 @@ static unsigned long fast_find_migrateblock(struct compact_control *cc)
 	cc->total_migrate_scanned += nr_scanned;
 
 	/*
-	 * If fast scanning failed then use a cached entry for a page block
-	 * that had free pages as the basis for starting a linear scan.
+	 * 빠른 스캔이 실패하였다면 선형 스캔을 시작하기 위한 기초로 free 페이지가 있는
+	 * 페이지블록에 대해 캐쉬된 항목을 사용하라.
 	 */
 	if (pfn == cc->migrate_pfn)
 		pfn = reinit_migrate_pfn(cc);
