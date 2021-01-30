@@ -504,21 +504,6 @@ static bool compact_lock_irqsave(spinlock_t *lock, unsigned long *flags,
 }
 
 /*
- * Compaction requires the taking of some coarse locks that are potentially
- * very heavily contended. The lock should be periodically unlocked to avoid
- * having disabled IRQs for a long time, even when there is nobody waiting on
- * the lock. It might also be that allowing the IRQs will result in
- * need_resched() becoming true. If scheduling is needed, async compaction
- * aborts. Sync compaction schedules.
- * Either compaction type will also abort if a fatal signal is pending.
- * In either case if the lock was locked, it is dropped and not regained.
- *
- * Returns true if compaction should abort due to fatal signal pending, or
- *		async compaction due to need_resched()
- * Returns false when compaction can continue (sync compaction might have
- *		scheduled)
- */
-/*
  * compaction 은 잠재적으로 매우 심하게 경합될 수 있는 거친 락을 가져와야 한다. 아무도
  * lock을 기다리지 않을 때 조차 긴시간 IRQ가 비활성화되는 것을 피하기 위해 주기적으로
  * 락을 해제해야 한다.
