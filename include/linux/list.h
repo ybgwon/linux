@@ -49,6 +49,7 @@ static inline bool __list_del_entry_valid(struct list_head *entry)
  *
  * prev/next 항목을 이미 알고 있는 내부 리스트 조작만을 위한 것이다 .
  */
+/* prev와 next 사이에 new를 삽입한다. prev - new -next 순 */
 static inline void __list_add(struct list_head *new,
 			      struct list_head *prev,
 			      struct list_head *next)
@@ -103,6 +104,7 @@ static inline void list_add_tail(struct list_head *new, struct list_head *head)
  *
  * prev/next 항목을 이미 알때 사용하는 내부 리스트 조작을 위한 것이다.
  */
+/* prev - next 를 연결한다. 원래는 prev - entry - next 순. */
 static inline void __list_del(struct list_head * prev, struct list_head * next)
 {
 	next->prev = prev;
@@ -115,6 +117,10 @@ static inline void __list_del(struct list_head * prev, struct list_head * next)
  * Note: list_empty() on entry does not return true after this, the entry is
  * in an undefined state.
  */
+/*
+ * entry->prev - entry->next를 연결하는 방식으로 entry 삭제.
+ * CONFIG_DEBUG_LIST 설정시 유효성 검사
+ */
 static inline void __list_del_entry(struct list_head *entry)
 {
 	if (!__list_del_entry_valid(entry))
@@ -123,6 +129,7 @@ static inline void __list_del_entry(struct list_head *entry)
 	__list_del(entry->prev, entry->next);
 }
 
+/* entry->prev - entry->next 를 연결하고 entry의 멤버들은 LIST_POISON 값 설정 */
 static inline void list_del(struct list_head *entry)
 {
 	__list_del_entry(entry);
@@ -137,6 +144,7 @@ static inline void list_del(struct list_head *entry)
  *
  * If @old was empty, it will be overwritten.
  */
+/* prev - old - next 에서 old가 new로 교체되어 prev - new - next 순 */
 static inline void list_replace(struct list_head *old,
 				struct list_head *new)
 {
@@ -146,6 +154,7 @@ static inline void list_replace(struct list_head *old,
 	new->prev->next = new;
 }
 
+/* old를 new로 교체하고 old는 초기화 */
 static inline void list_replace_init(struct list_head *old,
 					struct list_head *new)
 {
@@ -157,6 +166,7 @@ static inline void list_replace_init(struct list_head *old,
  * list_del_init - deletes entry from list and reinitialize it.
  * @entry: the element to delete from the list.
  */
+/* list_del과 다른점은 삭제한 entry 에 대하여 초기화 */
 static inline void list_del_init(struct list_head *entry)
 {
 	__list_del_entry(entry);
@@ -164,10 +174,11 @@ static inline void list_del_init(struct list_head *entry)
 }
 
 /**
- * list_move - delete from one list and add as another's head
- * @list: the entry to move
- * @head: the head that will precede our entry
+ * list_move - 한 목록에서 삭제하고 다른 목록에 더함
+ * @list: 옮길 항목
+ * @head: 항목 앞에 위치할 head
  */
+/* prev - list - next 에서 list 를 삭제하여 head - head->next 사이로 옮김 */
 static inline void list_move(struct list_head *list, struct list_head *head)
 {
 	__list_del_entry(list);
@@ -175,10 +186,11 @@ static inline void list_move(struct list_head *list, struct list_head *head)
 }
 
 /**
- * list_move_tail - delete from one list and add as another's tail
- * @list: the entry to move
- * @head: the head that will follow our entry
+ * list_move_tail - 한 목록에서 삭제하고 다른 목록의 꼬리에 더함
+ * @list: 옮길 항목
+ * @head: 항목 에 따라올 head
  */
+/* prev - list - next 에서 list 를 삭제하여 head->prev - head 사이로 옮김 */
 static inline void list_move_tail(struct list_head *list,
 				  struct list_head *head)
 {
@@ -211,9 +223,9 @@ static inline void list_bulk_move_tail(struct list_head *head,
 }
 
 /**
- * list_is_first -- tests whether @list is the first entry in list @head
- * @list: the entry to test
- * @head: the head of the list
+ * list_is_first -- @list가 @head 목록에서 첫번째 항목인지 테스트
+ * @list: 테스트할 항목
+ * @head: 목록의 head
  */
 static inline int list_is_first(const struct list_head *list,
 					const struct list_head *head)
@@ -222,9 +234,9 @@ static inline int list_is_first(const struct list_head *list,
 }
 
 /**
- * list_is_last - tests whether @list is the last entry in list @head
- * @list: the entry to test
- * @head: the head of the list
+ * list_is_last - 리스트가 목록의 마지막 항목인지 테스트
+ * @list: 테스트할 항목
+ * @head: 리스트의 head
  */
 static inline int list_is_last(const struct list_head *list,
 				const struct list_head *head)
@@ -233,8 +245,8 @@ static inline int list_is_last(const struct list_head *list,
 }
 
 /**
- * list_empty - tests whether a list is empty
- * @head: the list to test.
+ * list_empty - 리스트가 비었는지 테스트
+ * @head: 테스트할 리스트
  */
 static inline int list_empty(const struct list_head *head)
 {
@@ -259,9 +271,10 @@ static inline int list_empty_careful(const struct list_head *head)
 }
 
 /**
- * list_rotate_left - rotate the list to the left
- * @head: the head of the list
+ * list_rotate_left - 왼쪽으로 목록 회전
+ * @head: 리스트의 head
  */
+/* 목록의 첫번째 항목을 꼬리로 옮겨서 이중원형리스트를 시계반대방향으로 회전 */
 static inline void list_rotate_left(struct list_head *head)
 {
 	struct list_head *first;
@@ -272,10 +285,12 @@ static inline void list_rotate_left(struct list_head *head)
 	}
 }
 
+
 /**
- * list_is_singular - tests whether a list has just one entry.
- * @head: the list to test.
+ * list_is_singular - 목록에 항목 하나만 있는지 테스트
+ * @head: 테스트할 목록
  */
+/* 이중원형리스트에서 head->next와 head->prev 가 같다는 것은 목록이 하나 */
 static inline int list_is_singular(const struct list_head *head)
 {
 	return !list_empty(head) && (head->next == head->prev);
@@ -352,6 +367,10 @@ static inline void list_cut_before(struct list_head *list,
 	entry->prev = head;
 }
 
+/*
+ * prev와 next사이에 list를 연결한다.
+ * prev - list->next - ... - list->prev - next 순
+ */
 static inline void __list_splice(const struct list_head *list,
 				 struct list_head *prev,
 				 struct list_head *next)
@@ -449,6 +468,14 @@ static inline void list_splice_tail_init(struct list_head *list,
 #define list_entry(ptr, type, member) \
 	container_of(ptr, type, member)
 
+/*
+ * 커널 list api에서 함수명에 entry가 있으면 get the element 로
+ * 주석이 작성되는데 여기서 element 는 container_of 함수로 가져오게 되는
+ * @ptr이 속한 구조체의 포인터이다. 예. page 구조체(type=page)에 멤버변수명이
+ * lru(member=lru)이고 이 멤버변수의 변수명이 plru(ptr=plru)인 경우
+ * 이 plru의 주소에서 페이지 구조체의 lru 멤버변수의 offset 위치 만큼 빼서
+ * 페이지 구조체 포인터를 얻는다.
+ */
 /**
  * list_first_entry - get the first element from a list
  * @ptr:	the list head to take the element from.
