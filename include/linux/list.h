@@ -506,6 +506,11 @@ static inline void list_splice_tail_init(struct list_head *list,
  *
  * Note that if the list is empty, it returns NULL.
  */
+/*
+ * 목록의 첫번째 요소를 가져옮. 목록이 비었으면 NULL 반환
+ * pos__(head__->next)와 head 가 같지 않다는 건 목록의 첫번째 항목이
+ * 존재한다는 것이다. 단 매개변수로 온 ptr은 반드시 목록이 head 이어야 한다.
+ */
 #define list_first_entry_or_null(ptr, type, member) ({ \
 	struct list_head *head__ = (ptr); \
 	struct list_head *pos__ = READ_ONCE(head__->next); \
@@ -577,6 +582,10 @@ static inline void list_splice_tail_init(struct list_head *list,
  * @head:	the head for your list.
  * @member:	the name of the list_head within the struct.
  */
+/*
+ * 처음 요소(container_of(head->next, ...))에서
+ * 끝까지(container_of(head->prev,...)) 반복
+ */
 #define list_for_each_entry(pos, head, member)				\
 	for (pos = list_first_entry(head, typeof(*pos), member);	\
 	     &pos->member != (head);					\
@@ -587,6 +596,10 @@ static inline void list_splice_tail_init(struct list_head *list,
  * @pos:	the type * to use as a loop cursor.
  * @head:	the head for your list.
  * @member:	the name of the list_head within the struct.
+ */
+/*
+ * 끝 요소(container_of(head->prev, ...))에서
+ * 처음(container_of(head->next, ...))까지  역순으로 반복
  */
 #define list_for_each_entry_reverse(pos, head, member)			\
 	for (pos = list_last_entry(head, typeof(*pos), member);		\
@@ -601,6 +614,7 @@ static inline void list_splice_tail_init(struct list_head *list,
  *
  * Prepares a pos entry for use as a start point in list_for_each_entry_continue().
  */
+/* pos가 NULL이 아니면 pos 를 반환하고 NULL 이면 container_of(head,...) 요소를 반환 */
 #define list_prepare_entry(pos, head, member) \
 	((pos) ? : list_entry(head, typeof(*pos), member))
 
@@ -612,6 +626,10 @@ static inline void list_splice_tail_init(struct list_head *list,
  *
  * Continue to iterate over list of given type, continuing after
  * the current position.
+ */
+/*
+ * 현재(pos)의 다음(container_of(pos->member.next, ...)) 요소 에서
+ * 끝(container_of(head->prev,...))까지 반복
  */
 #define list_for_each_entry_continue(pos, head, member) 		\
 	for (pos = list_next_entry(pos, member);			\
@@ -627,6 +645,10 @@ static inline void list_splice_tail_init(struct list_head *list,
  * Start to iterate over list of given type backwards, continuing after
  * the current position.
  */
+/*
+ * 현재(pos)의 이전(container_of(pos->member.prev, ...)) 요소 에서
+ * 처음(container_of(head->prev,...))까지 역으로 반복
+ */
 #define list_for_each_entry_continue_reverse(pos, head, member)		\
 	for (pos = list_prev_entry(pos, member);			\
 	     &pos->member != (head);					\
@@ -640,6 +662,7 @@ static inline void list_splice_tail_init(struct list_head *list,
  *
  * Iterate over list of given type, continuing from current position.
  */
+/* pos(포함)부터 끝까지 entry 반복 */
 #define list_for_each_entry_from(pos, head, member) 			\
 	for (; &pos->member != (head);					\
 	     pos = list_next_entry(pos, member))
@@ -653,6 +676,7 @@ static inline void list_splice_tail_init(struct list_head *list,
  *
  * Iterate backwards over list of given type, continuing from current position.
  */
+/* pos(포함)부터 처음까지 entry 역방향으로 반복 */
 #define list_for_each_entry_from_reverse(pos, head, member)		\
 	for (; &pos->member != (head);					\
 	     pos = list_prev_entry(pos, member))
