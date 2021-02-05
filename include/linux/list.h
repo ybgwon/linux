@@ -676,7 +676,7 @@ static inline void list_splice_tail_init(struct list_head *list,
  *
  * Iterate backwards over list of given type, continuing from current position.
  */
-/* pos(포함)부터 처음까지 entry 역방향으로 반복 */
+/* pos(포함)부터 처음까지 역방향으로 entry 반복 */
 #define list_for_each_entry_from_reverse(pos, head, member)		\
 	for (; &pos->member != (head);					\
 	     pos = list_prev_entry(pos, member))
@@ -688,6 +688,7 @@ static inline void list_splice_tail_init(struct list_head *list,
  * @head:	the head for your list.
  * @member:	the name of the list_head within the struct.
  */
+/* 아래 부터는 같은 이름의 safe 버전들이다. */
 #define list_for_each_entry_safe(pos, n, head, member)			\
 	for (pos = list_first_entry(head, typeof(*pos), member),	\
 		n = list_next_entry(pos, member);			\
@@ -753,16 +754,23 @@ static inline void list_splice_tail_init(struct list_head *list,
  * and list_safe_reset_next is called after re-taking the lock and before
  * completing the current iteration of the loop body.
  */
+/* n에 다음 요소를 대입한다. 정확한 의도 파악 안됨 */
 #define list_safe_reset_next(pos, n, member)				\
 	n = list_next_entry(pos, member)
 
 /*
- * Double linked lists with a single pointer list head.
- * Mostly useful for hash tables where the two pointer list head is
- * too wasteful.
- * You lose the ability to access the tail in O(1).
+ * 단일 포인터 리스트 헤드의 이중 링크드 리스트
+ * 두개의 포인터 리스트 head 가 너무 낭비되는 해쉬 테이블에 가장 유용하다.
+ * 0(1)에서 꼬리로 접근 할 수 없다.
  */
 
+/*
+ * 해쉬 리스트에서 낭비되는 것을 방지하기 위해 head와 node 의
+ * 구조체 타입이 다르다. 따라서 head를 가리키는 포인터를 구조체
+ * 자신으로 하면 다른 노드들과 타입이 안맞게 되어 구현에 어려움이 있는데
+ * 그래서 노드의 pprev 멤버변수를 이전 구조체의 멤버변수인 next 를 가리키는
+ * 이중 포인터로 구현한다.
+ */
 #define HLIST_HEAD_INIT { .first = NULL }
 #define HLIST_HEAD(name) struct hlist_head name = {  .first = NULL }
 #define INIT_HLIST_HEAD(ptr) ((ptr)->first = NULL)
@@ -772,6 +780,7 @@ static inline void INIT_HLIST_NODE(struct hlist_node *h)
 	h->pprev = NULL;
 }
 
+/* h->pprev가 null이면 왜 unhashed 인가? */
 static inline int hlist_unhashed(const struct hlist_node *h)
 {
 	return !h->pprev;
@@ -782,6 +791,7 @@ static inline int hlist_empty(const struct hlist_head *h)
 	return !READ_ONCE(h->first);
 }
 
+/* prev - n - next 에서 n을 삭제하고 prev - next 연결 */
 static inline void __hlist_del(struct hlist_node *n)
 {
 	struct hlist_node *next = n->next;
@@ -807,6 +817,7 @@ static inline void hlist_del_init(struct hlist_node *n)
 	}
 }
 
+/* 해쉬 리스트의 맨 처음(h - first 의 중간)에 n 삽입. h - n - first 순 */
 static inline void hlist_add_head(struct hlist_node *n, struct hlist_head *h)
 {
 	struct hlist_node *first = h->first;
@@ -818,6 +829,7 @@ static inline void hlist_add_head(struct hlist_node *n, struct hlist_head *h)
 }
 
 /* next must be != NULL */
+/* next 바로 전에 n을 삽입한다. next->pprev-next 순에서 next->pprev-n-next 순 */
 static inline void hlist_add_before(struct hlist_node *n,
 					struct hlist_node *next)
 {
@@ -827,6 +839,7 @@ static inline void hlist_add_before(struct hlist_node *n,
 	WRITE_ONCE(*(n->pprev), n);
 }
 
+/* prev 뒤에 n 삽입. prev-prev->next순에서 prev-n-prev->next 순 */
 static inline void hlist_add_behind(struct hlist_node *n,
 				    struct hlist_node *prev)
 {
@@ -838,21 +851,20 @@ static inline void hlist_add_behind(struct hlist_node *n,
 		n->next->pprev  = &n->next;
 }
 
-/* after that we'll appear to be on some hlist and hlist_del will work */
+/* 후에 hlist에 있는 것처럼 보일 것이고 hlist_del 은 작동할 것이다 */
+/* pprev 값을 자신의 next 주소로 설정해서 가짜 hlist 구현 */
 static inline void hlist_add_fake(struct hlist_node *n)
 {
 	n->pprev = &n->next;
 }
 
+/* 위 명령으로 만든 fake hlist 이면 true 반환 */
 static inline bool hlist_fake(struct hlist_node *h)
 {
 	return h->pprev == &h->next;
 }
 
-/*
- * Check whether the node is the only node of the head without
- * accessing head:
- */
+/* head 접근 없이 노드가 head의 유일한 노드인지 검사 */
 static inline bool
 hlist_is_singular_node(struct hlist_node *n, struct hlist_head *h)
 {
@@ -863,6 +875,10 @@ hlist_is_singular_node(struct hlist_node *n, struct hlist_head *h)
  * Move a list from one list head to another. Fixup the pprev
  * reference of the first entry if it exists.
  */
+/*
+ * 목록을 다른 목록의 head로 옮긴다. 존재한다면 첫번째 항목의 pprev참조를
+ * 먼저 수정하라
+ */
 static inline void hlist_move_list(struct hlist_head *old,
 				   struct hlist_head *new)
 {
@@ -872,15 +888,18 @@ static inline void hlist_move_list(struct hlist_head *old,
 	old->first = NULL;
 }
 
+/* hlist를 포함하는 구조체 포인터 반환 */
 #define hlist_entry(ptr, type, member) container_of(ptr,type,member)
 
+/* 해쉬 리스트를 처음부터 끝까지 반복 */
 #define hlist_for_each(pos, head) \
 	for (pos = (head)->first; pos ; pos = pos->next)
 
+/* hlist_for_each 의 safe 버전 */
 #define hlist_for_each_safe(pos, n, head) \
 	for (pos = (head)->first; pos && ({ n = pos->next; 1; }); \
 	     pos = n)
-
+/* ptr 이 null 일 때 처리 */
 #define hlist_entry_safe(ptr, type, member) \
 	({ typeof(ptr) ____ptr = (ptr); \
 	   ____ptr ? hlist_entry(____ptr, type, member) : NULL; \
@@ -892,6 +911,7 @@ static inline void hlist_move_list(struct hlist_head *old,
  * @head:	the head for your list.
  * @member:	the name of the hlist_node within the struct.
  */
+/* 해쉬 리스트를 포함하는 구조체 요소들을 처음부터 끝까지 반복한다. next가 null인지도 체크 */
 #define hlist_for_each_entry(pos, head, member)				\
 	for (pos = hlist_entry_safe((head)->first, typeof(*(pos)), member);\
 	     pos;							\
@@ -902,6 +922,7 @@ static inline void hlist_move_list(struct hlist_head *old,
  * @pos:	the type * to use as a loop cursor.
  * @member:	the name of the hlist_node within the struct.
  */
+/* hlist 를 포함하는 구조체를 현재 pos 의 다음부터 끝까지 반복 */
 #define hlist_for_each_entry_continue(pos, member)			\
 	for (pos = hlist_entry_safe((pos)->member.next, typeof(*(pos)), member);\
 	     pos;							\
@@ -912,6 +933,7 @@ static inline void hlist_move_list(struct hlist_head *old,
  * @pos:	the type * to use as a loop cursor.
  * @member:	the name of the hlist_node within the struct.
  */
+/* hlist 를 포함하는 구조체를 현재 pos 에서부터 끝까지 반복 */
 #define hlist_for_each_entry_from(pos, member)				\
 	for (; pos;							\
 	     pos = hlist_entry_safe((pos)->member.next, typeof(*(pos)), member))
@@ -923,6 +945,7 @@ static inline void hlist_move_list(struct hlist_head *old,
  * @head:	the head for your list.
  * @member:	the name of the hlist_node within the struct.
  */
+/* hlist_for_each_entry의 safe 버전 */
 #define hlist_for_each_entry_safe(pos, n, head, member) 		\
 	for (pos = hlist_entry_safe((head)->first, typeof(*pos), member);\
 	     pos && ({ n = pos->member.next; 1; });			\
