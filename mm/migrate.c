@@ -1165,6 +1165,11 @@ out:
  * Obtain the lock on page, remove all ptes and migrate the page
  * to the newly allocated page in newpage.
  */
+/*
+ * if called compact_zone
+ * get_new_page - compaction_alloc(struct page *migratepage, unsigned long data)
+ * put_new_page - compaction_free(struct page *page, unsigned long data)
+ */
 static ICE_noinline int unmap_and_move(new_page_t get_new_page,
 				   free_page_t put_new_page,
 				   unsigned long private, struct page *page,
@@ -1399,6 +1404,11 @@ out:
  * or free list only if ret != 0.
  *
  * Returns the number of pages that were not migrated, or an error code.
+ */
+/*
+ * compact_zone : err = migrate_pages(&cc->migratepages, compaction_alloc,
+ *				compaction_free, (unsigned long)cc, cc->mode,
+ *				MR_COMPACTION);
  */
 int migrate_pages(struct list_head *from, new_page_t get_new_page,
 		free_page_t put_new_page, unsigned long private,
