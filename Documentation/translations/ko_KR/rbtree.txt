@@ -1,0 +1,411 @@
+=================================
+Red-black Trees (rbtree) in Linux
+=================================
+
+
+:Date: January 18, 2007
+:Author: Rob Landley <rob@landley.net>
+
+red-black trees는 무엇이고, 무엇을 위한 것인가?
+------------------------------------------------
+
+Red-black trees는 정렬 가능한 key/value 데이터 쌍을 저장하는데
+사용되는 자체 균형 이진 검색 트리의 한 형태이다. 이는 radix trees(희소
+배열을 효율적으로 저장하는데 사용되므로 긴 정수 인덱스를 사용하여 노드
+삽입/접근/삭제 하는데 사용됨)및 해쉬 테이블(순서에 따라 쉽게
+순환하도록 정렬을 유지하지 않고 특정 크기와 rbtree가 임의의 키를
+저장하는 것을 조정하는 hash 함수에 맞게 조정되어야 한다.) 과는 다르다.
+
+Red-black trees는 AVL tress와 유사하지만 삽입과 삭제에 대해 더빠른
+실시간 제한의 최악의 경우 성능을 제공한다.(트리 균형을 맞추기 위해
+각각 최대 2 회전및 3 회전), 약간 느리지만 (여전히 O(log n)) 조회 시간.
+Linux Weekly News를 인용하면:
+
+    커널에서 사용된 red-black trees가 많다. deadline과 CFQ I/O
+    스케쥴러는 rbtrees를 사용하여 요청을 추적한다; 패킷 CD/DVD
+    driver도 동일하다. 고해상도 타이머 코드는 rbtree를 사용하여 미해결
+    타이머 요청을 구성한다. ext3 파일시스템은 red-black tree에서
+    디렉토리 항목을 추적한다. 가상 메모리 영역(VMAs)는 epoll 파일
+    설명자, 암호화 키, "계층적 토큰 버킷" 스케쥴의 네트워크 패킷과 
+    마찬가지로 red-black trees 로 추적된다.
+
+이 문서는 리눅스 rbtree 구현의 사용을 다룬다. Red Black Trees의 특성과
+구현에 대한 자세한 내용은 다음을 참조하라.
+
+  Linux Weekly News article on red-black trees
+    http://lwn.net/Articles/184495/
+
+  Wikipedia entry on red-black trees
+    http://en.wikipedia.org/wiki/Red-black_tree
+
+red-black trees의 리눅스 구현
+---------------------------------------
+리눅스 rbtree 구현은 "lib/rbtree.c"파일에 있다. 사용하려면 아래 헤드
+파일을 포함시킨다.
+"#include <linux/rbtree.h>".
+
+리눅스 rbtree 구현은 속도에 최적화 되어 있으므로 기존의 tree 구현보다
+간접 계층이(그리고 더나은 캐시 지역성) 하나 적다. rb_node와 data
+구조체를 분리하기 위해 포인터를 사용하기 보다 rb_node 구조체의 각
+인스턴스가 구성하는 데이터 구조체에 포함된다. 그리고 비교 콜백 함수
+포인터를 사용하기 보다 사용자가 제공되는 rbtree 함수들을 콜하는 검색 과
+삽입 함수를 작성하도록 요구된다. 잠금또한 rbtree code의 사용자에게 맡겨진다.
+
+새 rbtree 만들기
+---------------------
+
+rbtree의 Data 노드는 struct rb_node member를 포함하는 구조체이다.
+
+  struct mytype {
+  	struct rb_node node;
+  	char *keystring;
+  };
+
+내포된 rb_node 구조체 포인터를 처리할 때, 포함하는 data 구조체는 표준
+container_of 매크로를 통해 접근할 수 있다. 또한 각각의 멤버는
+rb_entry(node, type, member) 매크로를 통해 접근될 수 있다.
+
+각 rbtree root에는 다음을 통해 비어 있도록 초기화 되는 rb_root 구조체가 있다.
+  struct rb_root mytree = RB_ROOT;
+
+rbtree에서 값 검색
+----------------------------------
+
+tree에 대한 검색 함수를 작성한는 것은 매우 간단하다. root 에서
+시작하여 각 값을 비교하고 필요에 따라 왼쪽이나 오른쪽 가지를 따라간다.
+Example::
+
+  struct mytype *my_search(struct rb_root *root, char *string)
+  {
+  	struct rb_node *node = root->rb_node;
+
+  	while (node) {
+  		struct mytype *data = container_of(node, struct mytype, node);
+		int result;
+
+		result = strcmp(string, data->keystring);
+
+		if (result < 0)
+  			node = node->rb_left;
+		else if (result > 0)
+  			node = node->rb_right;
+		else
+  			return data;
+	}
+	return NULL;
+  }
+
+rbtree에 data 삽입하기
+-----------------------------
+
+tree에 data를 삽입하려면 먼저 새노드를 삽입할 위치를 검색한 다음
+노드를 삽입하고 tree의 균형을 재조정("재색칠")해야 한다. 
+
+삽입을 위한 검색은 새 노드를 접목할 포인터의 위치를 찾는다는 것이 이전
+검색과 다르다. 새 노드는 또한 균형 재조정 목적으로 부모 노드의 링크가
+필요하다. 
+Example::
+
+  int my_insert(struct rb_root *root, struct mytype *data)
+  {
+  	struct rb_node **new = &(root->rb_node), *parent = NULL;
+
+  	/* Figure out where to put new node */
+  	while (*new) {
+  		struct mytype *this = container_of(*new, struct mytype, node);
+  		int result = strcmp(data->keystring, this->keystring);
+
+		parent = *new;
+  		if (result < 0)
+  			new = &((*new)->rb_left);
+  		else if (result > 0)
+  			new = &((*new)->rb_right);
+  		else
+  			return FALSE;
+  	}
+
+  	/* Add new node and rebalance tree. */
+  	rb_link_node(&data->node, parent, new);
+  	rb_insert_color(&data->node, root);
+
+	return TRUE;
+  }
+
+rbtree의 기존 data 삭제와 교체
+------------------------------------------------
+
+tree에서 기존 node를 삭제하기 위해 호출::
+
+  void rb_erase(struct rb_node *victim, struct rb_root *tree);
+
+Example::
+
+  struct mytype *data = mysearch(&mytree, "walrus");
+
+  if (data) {
+  	rb_erase(&data->node, &mytree);
+  	myfree(data);
+  }
+
+tree의 기존 노드를 동일한 키를 가진 새 노드로 교체하기 위해, 호출::
+
+  void rb_replace_node(struct rb_node *old, struct rb_node *new,
+  			struct rb_root *tree);
+
+이 방법으로 node를 교체하면 tree가 재정렬 되지 않는다. 새 노드가 구
+노드와 같은 키를 가지지 않으면 rbtree가 손상될 수 있다.
+
+rbtree 에 저장된 요소 반복(정렬 순서로)
+------------------------------------------------------------------
+
+rbtree의 내용을 정렬된 순서로 반복하기위해 4개의 함수가
+제공된다. 이들은 임의의 tree에서 작동하고 변경되거나 래핑할(?) 필요가
+없다(잠금 목적 제외)::
+
+  struct rb_node *rb_first(struct rb_root *tree);
+  struct rb_node *rb_last(struct rb_root *tree);
+  struct rb_node *rb_next(struct rb_node *node);
+  struct rb_node *rb_prev(struct rb_node *node);
+
+반복을 시작하려면 tree의 root를 가리키는 포인터로 rb_first() 나
+rb_last()를 호출하라. 그러면 tree의 첫번째나 마지막 요소에 포함된 node
+구조체 포인터를 반환할 것이다. 계속하려면 현재 node에 rb_next() 나
+rb_prev()를 호출함으로써 다음이나 이전 노드를 가져온다. 더이상 남은
+노드가 없으면 NULL을 반환한다.
+반복자 함수는 포함된 rb_node 구조체의 포인터를 반환하고, 포함하는 data
+구조체는 container_of() 매크로로 접근할 수 있고 개별 멤버는
+rb_entry(node, type, member)로 바로 접근할 수 있다. 
+Example::
+
+  struct rb_node *node;
+  for (node = rb_first(&mytree); node; node = rb_next(node))
+	printk("key=%s\n", rb_entry(node, struct mytype, node)->keystring);
+
+캐쉬된 rbtrees
+--------------
+
+Computing the leftmost (smallest) node is quite a common task for binary
+search trees, such as for traversals or users relying on a the particular
+order for their own logic. To this end, users can use 'struct rb_root_cached'
+to optimize O(logN) rb_first() calls to a simple pointer fetch avoiding
+potentially expensive tree iterations. This is done at negligible runtime
+overhead for maintanence; albeit larger memory footprint.
+가장 왼쪽(가장작은) 노드 계산은 순회나 고유 로직의 각 순서에 의존하는
+사용자의 경우 이진 탐색 trees 를 위한 매우 일반적인 작업이다.
+
+rb_root 구조체와 비슷하게 캐쉬된 rbtrees는 비어 있게 초기화 된다:
+  struct rb_root_cached mytree = RB_ROOT_CACHED;
+
+Cached rbtree는 간단히 가장 왼쪽 노드를 캐쉬 하기위한 추가 포인터를 가지는
+일반 rb_root이다. 이렇게 하면 rb_root_cached가 rb_root 있는 곳 어디든
+존재할 수 있고 몇가지 추가 인터페이스 뿐만 아니라 증강 트리도 지원 한다.:
+
+  struct rb_node *rb_first_cached(struct rb_root_cached *tree);
+  void rb_insert_color_cached(struct rb_node *, struct rb_root_cached *, bool);
+  void rb_erase_cached(struct rb_node *node, struct rb_root_cached *);
+
+삽입과 삭제 호출 모두 augmented trees 의 해당 부분을 가진다. :
+  void rb_insert_augmented_cached(struct rb_node *node, struct rb_root_cached *,
+				  bool, struct rb_augment_callbacks *);
+  void rb_erase_augmented_cached(struct rb_node *, struct rb_root_cached *,
+				 struct rb_augment_callbacks *);
+
+
+Augmented rbtrees 지원
+-----------------------------
+
+Augmented rbtree는 각 노드에 "일부" 추가 데이터가 저장된 rbtree
+이다. 여기서 노드 N에 대한 추가 데이터는 N에 뿌리를 둔 하위 트리의
+모든 노드 내용의 함수여야 한다. 이 데이터는 rbtree에 대한 몇가지 새
+기능을 추가하는데 사용할 수 있다. Augmented rbtree는 기본 rbtree 기반
+위에 구축된 선택적 기능이다. 이 기능을 원하는 rbtree 사용자는 삽입과
+삭제시 사용자 제공 augmentation 콜백으로 augmentaion 함수를 호출해야
+한다. 
+
+augmented rbtree 조작을 구현하는 C 파일은 <linux/rbtree.h> 대신 
+<linux/rbtree_augrmented.h>를 include 해야
+한다. linux/rbtree_augmented.h 는 의존할 것으로 예상되지 않는 일부
+rbtree 구현 세부 정보를 노출하는 것에 주의 하라. 문서화된 API를
+고수하고 헤더 파일에서 <linux/rbtree_augmented.h>를 포함하지 마라.
+그래야 사용자가 실수로 이러한 구현 세부 정보에 의존할 가능성을 최소화할 수
+있다(?).
+
+삽입시 사용자는 삽입된 노드로 이어지는 경로에 대한 추가 정보를
+업데이트한 다음 평소와 같이 rb_link_node()를 호출하고 일반적인
+rb_insert_color() 호출 대신 rb_augment_inserted()를 호출해야
+한다. rb_augment_inserted() 함수가 rbtree 균형을 재조정하면 영향을
+받는 하위 트리에 추가 정보를 업데이트 하기 위해 사용자 제공 함수가
+콜백 될 것이다.
+
+노드 삭제시 사용자는 rb_erase() 대신 rb_erase_augmented()를 호출 해야
+한다. rb_erase_augmented()는 영향을 받는 하위 트리 추가 정보를
+업데이트 하기 위해 사용자 제공 함수를 다시 호출한다.
+
+In both cases, the callbacks are provided through struct
+rb_augment_callbacks.
+두 경우 모두 콜백은 rb_augment_callbacks 구조체를 통해 제공된다.
+세가지 콜백이 정의 되어야 한다.
+
+- progagation callback, 주어진 stop 지점(또는 root 까지 모든 경로
+  업데이트)까지 주어진 노드와 그것의 조상들을 위한 augmented value
+  업데이트
+  
+- copy callback, 새롭게 할당된 하위 트리 root 까지 주어진 하위 트리
+  augmented value 복사  
+
+- tree rotation callback, 새롭게 할당된 하위 tree root까지 augmented
+  value를 복사하고 이전 하위 tree root의 augmented 정보 재계산
+  
+- rb_erase_augmented()의 컴파일된 코드는 propagation 과 copy 콜백을
+  inline 할수 있으며, 이로 인해 큰 함수가 생성되므로 각 augmented rbtree
+  사용자는 컴파일된 코드 크기를 제한 하기 위해 단일 rb_erase_augmented
+  호출 site를 가져야 한다.
+
+사용 견본
+^^^^^^^^^^^^
+
+Interval tree는 augmented rb tree의 예이다. 참조 - 
+"Introduction to Algorithms" by Cormen, Leiserson, Rivest and Stein
+interval 트리에 대한 자세한 사항:
+
+전형적인 rbtree는 단일 키를 가지고 [lo:hi]같은 간격 범위를 저장하고
+새로운 lo:hi의 어떤 겹치는 부분을 빨리 찾거나 새로운 lo:hi와 정확히
+일치하는 지를 찾는데 직접 사용할 수 없다.
+
+그러나, rbtree는 효과적인 검색과 정확한 일치를 가능하게 하는 구조화된
+방식으로 간격 범위를 저장하도록 증대될 수 있다.
+
+각 노드에 저장된 이 "추가 정보"는 그 자손인 모든 노드 사이의
+최대값(max_hi)이다. 이 정보는 노드와 직계자손만 보면 각노드에서
+유지 관리될 수 있다. 그리고 이것은 다음과 같이 가장 낮은 일치(모든
+가능한 일치중 가장 낮은 시작 주소)에 대한 O(log n) 조회에 사용된다::
+
+  struct interval_tree_node *
+  interval_tree_first_match(struct rb_root *root,
+			    unsigned long start, unsigned long last)
+  {
+	struct interval_tree_node *node;
+
+	if (!root->rb_node)
+		return NULL;
+	node = rb_entry(root->rb_node, struct interval_tree_node, rb);
+
+	while (true) {
+		if (node->rb.rb_left) {
+			struct interval_tree_node *left =
+				rb_entry(node->rb.rb_left,
+					 struct interval_tree_node, rb);
+			if (left->__subtree_last >= start) {
+				/*
+				 * Some nodes in left subtree satisfy Cond2.
+				 * Iterate to find the leftmost such node N.
+				 * If it also satisfies Cond1, that's the match
+				 * we are looking for. Otherwise, there is no
+				 * matching interval as nodes to the right of N
+				 * can't satisfy Cond1 either.
+				 */
+				node = left;
+				continue;
+			}
+		}
+		if (node->start <= last) {		/* Cond1 */
+			if (node->last >= start)	/* Cond2 */
+				return node;	/* node is leftmost match */
+			if (node->rb.rb_right) {
+				node = rb_entry(node->rb.rb_right,
+					struct interval_tree_node, rb);
+				if (node->__subtree_last >= start)
+					continue;
+			}
+		}
+		return NULL;	/* No match */
+	}
+  }
+
+삽입/제거는 다음 augmented callbacks을 사용하여 정의된다::
+
+  static inline unsigned long
+  compute_subtree_last(struct interval_tree_node *node)
+  {
+	unsigned long max = node->last, subtree_last;
+	if (node->rb.rb_left) {
+		subtree_last = rb_entry(node->rb.rb_left,
+			struct interval_tree_node, rb)->__subtree_last;
+		if (max < subtree_last)
+			max = subtree_last;
+	}
+	if (node->rb.rb_right) {
+		subtree_last = rb_entry(node->rb.rb_right,
+			struct interval_tree_node, rb)->__subtree_last;
+		if (max < subtree_last)
+			max = subtree_last;
+	}
+	return max;
+  }
+
+  static void augment_propagate(struct rb_node *rb, struct rb_node *stop)
+  {
+	while (rb != stop) {
+		struct interval_tree_node *node =
+			rb_entry(rb, struct interval_tree_node, rb);
+		unsigned long subtree_last = compute_subtree_last(node);
+		if (node->__subtree_last == subtree_last)
+			break;
+		node->__subtree_last = subtree_last;
+		rb = rb_parent(&node->rb);
+	}
+  }
+
+  static void augment_copy(struct rb_node *rb_old, struct rb_node *rb_new)
+  {
+	struct interval_tree_node *old =
+		rb_entry(rb_old, struct interval_tree_node, rb);
+	struct interval_tree_node *new =
+		rb_entry(rb_new, struct interval_tree_node, rb);
+
+	new->__subtree_last = old->__subtree_last;
+  }
+
+  static void augment_rotate(struct rb_node *rb_old, struct rb_node *rb_new)
+  {
+	struct interval_tree_node *old =
+		rb_entry(rb_old, struct interval_tree_node, rb);
+	struct interval_tree_node *new =
+		rb_entry(rb_new, struct interval_tree_node, rb);
+
+	new->__subtree_last = old->__subtree_last;
+	old->__subtree_last = compute_subtree_last(old);
+  }
+
+  static const struct rb_augment_callbacks augment_callbacks = {
+	augment_propagate, augment_copy, augment_rotate
+  };
+
+  void interval_tree_insert(struct interval_tree_node *node,
+			    struct rb_root *root)
+  {
+	struct rb_node **link = &root->rb_node, *rb_parent = NULL;
+	unsigned long start = node->start, last = node->last;
+	struct interval_tree_node *parent;
+
+	while (*link) {
+		rb_parent = *link;
+		parent = rb_entry(rb_parent, struct interval_tree_node, rb);
+		if (parent->__subtree_last < last)
+			parent->__subtree_last = last;
+		if (start < parent->start)
+			link = &parent->rb.rb_left;
+		else
+			link = &parent->rb.rb_right;
+	}
+
+	node->__subtree_last = last;
+	rb_link_node(&node->rb, rb_parent, link);
+	rb_insert_augmented(&node->rb, root, &augment_callbacks);
+  }
+
+  void interval_tree_remove(struct interval_tree_node *node,
+			    struct rb_root *root)
+  {
+	rb_erase_augmented(&node->rb, root, &augment_callbacks);
+  }
